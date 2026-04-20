@@ -1,0 +1,61 @@
+name: cutler
+# Captured from Bocconi HPC cluster (slogin.hpc.unibocconi.it) — 2026-04-20
+# Hardware: NVIDIA A100 80GB, CUDA 12.1
+# To recreate: conda env create -f environment.yml
+#
+# NOTE: detectron2 and pydensecrf are installed from source (no conda package).
+# After creating this env, run:
+#   pip install 'git+https://github.com/facebookresearch/detectron2.git'
+#   pip install git+https://github.com/lucasb-eyer/pydensecrf.git
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.9
+  - pip
+
+  # PyTorch — CUDA 12.1 build (installed via pip index, listed here for reference)
+  # pip: torch, torchvision --index-url https://download.pytorch.org/whl/cu121
+
+  - pip:
+    - torch
+    - torchvision
+    # ^ pinned to whatever was current on 2026-04-20 via the cu121 index;
+    #   run `pip show torch` on the cluster and update this line with the exact version
+
+    # Detectron2 (built from source — see note above)
+    # - git+https://github.com/facebookresearch/detectron2.git
+
+    # COCO / evaluation
+    - pycocotools==2.0.6
+
+    # Vision utilities
+    - opencv-python==4.6.0.66
+    - scikit-image==0.19.2
+    - scikit-learn==1.1.1
+    - timm==0.5.4
+    - shapely==1.8.2
+    - Pillow
+
+    # Scientific stack
+    - scipy
+    - numpy==1.20.0
+
+    # ANN / retrieval
+    - faiss-gpu==1.7.2
+
+    # Detectron2 / fvcore deps
+    - fvcore==0.1.5.post20220512
+    - pyyaml==6.0
+
+    # Dense CRF post-processing (built from source — see note above)
+    # - git+https://github.com/lucasb-eyer/pydensecrf.git
+
+    # Misc utilities
+    - colored==1.4.4
+    - gdown==4.5.4
+    - tqdm
