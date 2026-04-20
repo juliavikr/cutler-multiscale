@@ -22,18 +22,17 @@ module load miniconda3
 if conda info --envs | grep -q "^cutler "; then
     echo "Conda env 'cutler' already exists — skipping creation."
 else
-    conda create -y -n cutler python=3.8
+    conda create -y -n cutler python=3.9
 fi
 
 conda activate cutler
 
-# PyTorch + CUDA 11.6 (matches cog.yaml cuda version)
-pip install torch==1.11.0+cu116 torchvision==0.12.0+cu116 \
-    --extra-index-url https://download.pytorch.org/whl/cu116
+# PyTorch + CUDA 12.1 (Bocconi A100 cluster)
+pip install torch torchvision \
+    --index-url https://download.pytorch.org/whl/cu121
 
-# Detectron2 built against torch 1.11 / CUDA 11.6
-pip install detectron2 -f \
-    https://dl.fbaipublicfiles.com/detectron2/wheels/cu116/torch1.11/index.html
+# Detectron2 — build from source against the installed torch (no prebuilt wheel for cu121)
+pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
 # Core vision + scientific stack
 pip install \
