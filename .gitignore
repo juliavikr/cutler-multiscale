@@ -205,3 +205,50 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# PyTorch
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# Detectron2 / model outputs
+output/
+results/
+runs/
+checkpoints/
+model_final.pth
+last_checkpoint
+metrics.json
+events.out.tfevents.*
+
+# DINO / ViT weights
+dino_*/
+*.pkl
+
+# COCO / dataset caches — large data, store elsewhere
+datasets/
+data/
+*.lmdb
+*.h5
+*.hdf5
+annotations_cache/
+
+# Pseudo-label outputs
+pseudo_masks/
+pseudo_labels/
+*.json.gz
+
+# Wandb / experiment tracking
+wandb/
+mlruns/
+lightning_logs/
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Compiled CUDA extensions
+*.so
+CutLER/**/*.so
+CutLER/build/
