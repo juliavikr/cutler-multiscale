@@ -20,7 +20,7 @@ conda activate cutler
 
 # --- Paths (edit before submitting) ---
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DATA_ROOT="${DATA_ROOT:-/mnt/data}"                          # override via env if needed
+DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
 DATASET_PATH="${DATA_ROOT}/tiny-imagenet-200/train"         # 200 class subdirectories
 OUT_DIR="${REPO_ROOT}/pseudo_masks/tiny_imagenet"
 DINO_WEIGHTS="${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth"

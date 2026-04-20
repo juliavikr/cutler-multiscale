@@ -20,7 +20,7 @@ conda activate cutler
 
 # --- Paths (edit before submitting) ---
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DATA_ROOT="${DATA_ROOT:-/mnt/data}"
+DATA_ROOT="${DATA_ROOT:-${HOME}/data}"
 PSEUDO_LABELS="${REPO_ROOT}/pseudo_masks/tiny_imagenet"     # JSON from run_maskcut.sh
 IMAGE_DIR="${DATA_ROOT}/tiny-imagenet-200/train"
 OUTPUT_DIR="${REPO_ROOT}/output/cutler_r50_1gpu"

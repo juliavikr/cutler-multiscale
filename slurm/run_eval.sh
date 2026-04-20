@@ -20,7 +20,7 @@ conda activate cutler
 
 # --- Paths (edit before submitting) ---
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DATA_ROOT="${DATA_ROOT:-/mnt/data}"
+DATA_ROOT="${DATA_ROOT:-${HOME}/data}"
 OUTPUT_DIR="${REPO_ROOT}/output/cutler_r50_1gpu"             # directory from run_training.sh
 CONFIG="${REPO_ROOT}/CutLER/cutler/model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml"
 
