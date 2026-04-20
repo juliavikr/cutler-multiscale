@@ -13,8 +13,6 @@
 #SBATCH --output=logs/eval_%j.out
 #SBATCH --error=logs/eval_%j.err
 
-set -euo pipefail
-
 module load miniconda3
 conda activate cutler
 
