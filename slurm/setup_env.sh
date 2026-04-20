@@ -17,6 +17,7 @@
 set -euo pipefail
 
 module load miniconda3
+eval "$(conda shell.bash hook)"
 
 # Create environment (skip if it already exists)
 if conda info --envs | grep -q "^cutler "; then
@@ -27,35 +28,48 @@ fi
 
 conda activate cutler
 
-# PyTorch + CUDA 12.1 (Bocconi A100 cluster)
+# 1. PyTorch + CUDA 12.1 (Bocconi A100 cluster)
 pip install torch torchvision \
     --index-url https://download.pytorch.org/whl/cu121
 
-# Detectron2 — build from source against the installed torch (no prebuilt wheel for cu121)
+# 2. Detectron2 — build from source against the installed torch (no prebuilt wheel for cu121)
 pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
-# Core vision + scientific stack
+# 3. Remaining dependencies
 pip install \
+    scipy \
+    pycocotools==2.0.6 \
     opencv-python==4.6.0.66 \
+    timm==0.5.4 \
     scikit-image==0.19.2 \
     scikit-learn==1.1.1 \
-    scipy \
     shapely==1.8.2 \
-    timm==0.5.4 \
     faiss-gpu==1.7.2 \
-    numpy==1.20.0
-
-# COCO tools and utilities
-pip install \
-    pycocotools==2.0.6 \
+    numpy==1.20.0 \
     pyyaml==6.0 \
     fvcore==0.1.5.post20220512 \
     colored==1.4.4 \
     gdown==4.5.4 \
     tqdm
 
-# Dense CRF (for MaskCut post-processing)
+# 4. Dense CRF (for MaskCut post-processing)
 pip install git+https://github.com/lucasb-eyer/pydensecrf.git
 
+echo ""
+echo "=== Verification ==="
+python - <<'EOF'
+import torch, sys
+print(f"Python:  {sys.version.split()[0]}")
+print(f"PyTorch: {torch.__version__}")
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"CUDA version:   {torch.version.cuda}")
+    print(f"GPU:            {torch.cuda.get_device_name(0)}")
+
+import detectron2
+print(f"Detectron2: {detectron2.__version__}")
+EOF
+
+echo ""
 echo "Environment setup complete."
 conda list | tee logs/cutler_env_packages.txt
