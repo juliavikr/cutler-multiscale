@@ -59,7 +59,7 @@ if [ "${USE_CPU}" = "1" ]; then
   EXTRA_ARGS+=(--cpu)
 fi
 
-python "${REPO_ROOT}/CutLER/maskcut/multiscale_maskcut.py" \
+python "${REPO_ROOT}/multiscale/multiscale_maskcut.py" \
     --vit-arch small \
     --vit-feat k \
     --patch-size 8 \

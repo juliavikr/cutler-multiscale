@@ -43,6 +43,7 @@
 - [x] Numbers match CutLER paper — reproducibility confirmed
 
 ### Phase 3: Multi-Scale MaskCut (upcoming)
+- [x] Moved custom multi-scale MaskCut code/docs to top-level `multiscale/` so it can be committed in the parent repo
 - [ ] Implement image pyramid construction
 - [ ] Run MaskCut at each scale
 - [ ] Implement multi-scale proposal merging (Soft-NMS or WBF)

@@ -1,6 +1,8 @@
 # cutler-multiscale
 Improving small-object detection in CutLER via Multi-Scale Pseudo-Label Generation
 
+Custom multi-scale pseudo-label generation code lives in [`multiscale/`](/mnt/c/Users/Luiz%20Venosa/Documents/Bocconi/Master/2nd%20Semester/Computer%20VIsion/project/cutler-multiscale/multiscale), not inside the upstream `CutLER/` submodule.
+
 ## Results
 
 Evaluated on COCO val2017, class-agnostic, fully unsupervised (no labels used at any stage).
