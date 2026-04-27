@@ -1,6 +1,6 @@
 # Project Notes — cutler-multiscale
 
-## Current Status: Phase 2 — Baseline Evaluation (in progress)
+## Current Status: Phase 3 — Multi-Scale MaskCut (upcoming)
 
 **Date started:** 2026-04-20
 
@@ -35,12 +35,12 @@
 - [x] Downloaded COCO val2017 images and annotations to `~/data/coco/`
 - [x] Downloaded pre-trained CutLER checkpoint and pre-generated MaskCut annotations
 
-### Phase 2: Baseline Reproduction (current)
+### Phase 2: Baseline Reproduction (complete — 2026-04-27)
 - [x] Downloaded pre-trained `cutler_cascade_final.pth` checkpoint
 - [x] Downloaded pre-generated MaskCut annotations JSON (imagenet_train_fixsize480_tau0.15_N3)
-- [ ] **IN PROGRESS** — Evaluate pre-trained model on COCO val2017 (`sbatch slurm/run_eval.sh`)
-- [ ] Record AP, AP50, AP75, APs, APm
-- [ ] Compare to reported numbers in CutLER paper
+- [x] Evaluated pre-trained model on COCO val2017 (`sbatch slurm/run_eval.sh`)
+- [x] Recorded AP, AP50, AP75, APs, APm, APl for both bbox and segm (see Results Tracker)
+- [x] Numbers match CutLER paper — reproducibility confirmed
 
 ### Phase 3: Multi-Scale MaskCut (upcoming)
 - [ ] Implement image pyramid construction
@@ -59,17 +59,29 @@
 
 ## Blockers / Open Questions
 
-- Awaiting COCO val2017 eval results from cluster
+None.
 
 ---
 
 ## Results Tracker
 
-| Method | AP | AP50 | AP75 | APs | APm | Notes |
-|--------|----|------|------|-----|-----|-------|
-| CutLER (paper) | 8.3 | 13.8 | 8.0 | — | — | COCO val, unsupervised |
-| CutLER (ours) | — | — | — | — | — | to be filled |
-| MS-MaskCut (ours) | — | — | — | — | — | to be filled |
+Evaluated on COCO val2017, class-agnostic, unsupervised (no labels used).
+
+### Bounding Box (BBOX)
+
+| Method | AP | AP50 | AP75 | APs | APm | APl | Notes |
+|--------|----|------|------|-----|-----|-----|-------|
+| CutLER (paper) | 8.3 | 13.8 | 8.0 | — | — | — | reported in paper |
+| CutLER (ours) | **12.33** | **21.98** | **11.90** | **3.66** | **12.72** | **29.60** | cutler_cascade_final.pth, 2026-04-27 |
+| MS-MaskCut (ours) | — | — | — | — | — | — | to be filled |
+
+### Instance Segmentation (SEGM)
+
+| Method | AP | AP50 | AP75 | APs | APm | APl | Notes |
+|--------|----|------|------|-----|-----|-----|-------|
+| CutLER (paper) | — | — | — | — | — | — | not reported separately |
+| CutLER (ours) | **9.78** | **18.92** | **9.19** | **2.44** | **8.77** | **24.29** | cutler_cascade_final.pth, 2026-04-27 |
+| MS-MaskCut (ours) | — | — | — | — | — | — | to be filled |
 
 ---
 
