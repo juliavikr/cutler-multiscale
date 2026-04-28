@@ -543,6 +543,8 @@ if __name__ == "__main__":
     image_names = []
     for img_folder in img_folders[start_idx:end_idx]:
         args.img_dir = os.path.join(args.dataset_path, img_folder)
+        if os.path.isdir(os.path.join(args.img_dir, "images")):
+            args.img_dir = os.path.join(args.img_dir, "images")
         img_list = sorted(os.listdir(args.img_dir))
 
         for img_name in tqdm(img_list) :
@@ -613,6 +615,10 @@ if __name__ == "__main__":
                     output["annotations"].append(annotation_info)
                     segmentation_id += 1
             image_id += 1
+        # incremental checkpoint after each folder
+        ckpt_path = os.path.join(args.out_dir, "checkpoint.json")
+        with open(ckpt_path, "w") as ckpt_f:
+            json.dump(output, ckpt_f)
 
     # save annotations
     crop_tag = ''

@@ -1,6 +1,6 @@
 # Project Notes — cutler-multiscale
 
-## Current Status: Phase 3 — Multi-Scale MaskCut (upcoming)
+## Current Status: Phase 3 — Multi-Scale MaskCut (in progress)
 
 **Date started:** 2026-04-20
 
@@ -44,11 +44,15 @@
 
 ### Phase 3: Multi-Scale MaskCut (upcoming)
 - [x] Moved custom multi-scale MaskCut code/docs to top-level `multiscale/` so it can be committed in the parent repo
-- [ ] Implement image pyramid construction
-- [ ] Run MaskCut at each scale
-- [ ] Implement multi-scale proposal merging (Soft-NMS or WBF)
-- [ ] Regenerate pseudo-labels with multi-scale method
-- [ ] Retrain detector, evaluate — focus on APs (small object AP)
+- [x] Implement image pyramid construction (crop scales 1.0, 0.5)
+- [x] Run MaskCut at each scale
+- [x] Implement multi-scale proposal merging (IoU-based NMS)
+- [x] Regenerate pseudo-labels with multi-scale method on TinyImageNet-5 subset
+      — 2500 images, 24771 annotations (~9.9 masks/image)
+      — Output: pseudo_masks/tiny_imagenet/imagenet_train_fixsize480_tau0.2_N2_mc1.0-0.5_ov0.3_miou0.5_0_5.json
+      — Runtime: ~4h on A100 (gnode02), job 484052, 2026-04-28
+- [ ] Retrain detector on pseudo-labels, evaluate on COCO val2017 small+medium
+- [ ] Compare APs/APm vs CutLER baseline
 
 ### Phase 4: Analysis & Write-up (upcoming)
 - [ ] Ablation: effect of each scale, merging strategy, number of iterations
@@ -60,7 +64,12 @@
 
 ## Blockers / Open Questions
 
-None.
+- TinyImageNet has extra `images/` subdirectory per class — patched in multiscale_maskcut.py
+- SLURM log paths must be absolute — patched in run_multiscale_maskcut.sh
+- REPO_ROOT must be hardcoded — patched in run_multiscale_maskcut.sh
+- dino.py unconditionally calls torch.hub for weights — patched to check os.path.isfile first
+- Full TinyImageNet (100k images) too slow at ~6s/img — using 5-class subset for now
+- Added incremental JSON checkpoint after each class folder to survive timeouts
 
 ---
 

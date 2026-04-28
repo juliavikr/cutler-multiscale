@@ -1,27 +1,29 @@
 #!/bin/bash
 
 #SBATCH --job-name=cutler-ms-maskcut
-#SBATCH --account=3355142
 #SBATCH --partition=stud
 #SBATCH --qos=stud
+#SBATCH --account=3152697
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=08:00:00
-#SBATCH --output=logs/ms_maskcut_%j.out
-#SBATCH --error=logs/ms_maskcut_%j.err
+#SBATCH --time=24:00:00
+#SBATCH --output=/home/3152697/cutler-multiscale/logs/ms_maskcut_%j.out
+#SBATCH --error=/home/3152697/cutler-multiscale/logs/ms_maskcut_%j.err
 
 set -euo pipefail
 
 module load miniconda3
+source /software/miniconda3/etc/profile.d/conda.sh
 conda activate cutler
 
 # --- Paths (edit before submitting) ---
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="/home/3152697/cutler-multiscale"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
-DATASET_PATH="${DATA_ROOT}/tiny-imagenet-200/train"         # 200 class subdirectories
+DATASET_PATH="${DATA_ROOT}/tiny-imagenet-5/train"
+DATASET_PATH_WITH_IMAGES=1         # 200 class subdirectories
 OUT_DIR="${REPO_ROOT}/pseudo_masks/tiny_imagenet"
 DINO_WEIGHTS="${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth"
 
@@ -29,10 +31,10 @@ mkdir -p "${OUT_DIR}"
 
 # --- Multi-scale MaskCut knobs (override via env) ---
 TAU="${TAU:-0.2}"
-N_MASKS="${N_MASKS:-3}"
+N_MASKS="${N_MASKS:-2}"
 FIXED_SIZE="${FIXED_SIZE:-480}"
 USE_CPU="${USE_CPU:-0}"
-CROP_SCALES="${CROP_SCALES:-1.0,0.75,0.5}"
+CROP_SCALES="${CROP_SCALES:-1.0,0.5}"
 CROP_OVERLAP="${CROP_OVERLAP:-0.3}"
 CROP_MAX_PER_SCALE="${CROP_MAX_PER_SCALE:-9}"
 MERGE_IOU_THRESH="${MERGE_IOU_THRESH:-0.5}"
