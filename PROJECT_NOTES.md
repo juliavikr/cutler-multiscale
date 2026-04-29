@@ -112,3 +112,17 @@ Evaluated on COCO val2017, class-agnostic, unsupervised (no labels used).
 | numpy | <2 (pinned — detectron2 0.6 incompatible with numpy 2.x) |
 
 _Note: detectron2 must be installed from miropsota pre-built wheels. Building from source against torch 2.x fails due to removed `torch.cuda.amp` APIs. See `slurm/install_detectron2.sh`._
+
+### Pseudo-label comparison (2026-04-29)
+
+Single-scale vs multi-scale MaskCut on same 5 TinyImageNet classes (2500 images):
+
+| Metric | Single-scale | Multi-scale |
+|--------|-------------|-------------|
+| Annotations | 3,315 | 24,771 |
+| Masks/image | 1.33 | 9.91 |
+| Mean area | 993.6 | 374.4 |
+| Small (area<1024) | 1,875 (56.6%) | 23,433 (94.6%) |
+| Medium (1024-9216) | 1,440 (43.4%) | 1,338 (5.4%) |
+
+Multi-scale generates 7.5x more annotations, concentrated in small objects.
