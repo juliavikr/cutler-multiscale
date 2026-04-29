@@ -42,22 +42,16 @@
 - [x] Recorded AP, AP50, AP75, APs, APm, APl for both bbox and segm (see Results Tracker)
 - [x] Numbers match CutLER paper — reproducibility confirmed
 
-### Phase 3: Multi-Scale MaskCut (in progress)
+### Phase 3: Multi-Scale MaskCut (upcoming)
 - [x] Moved custom multi-scale MaskCut code/docs to top-level `multiscale/` so it can be committed in the parent repo
 - [x] Corrected multi-scale crop logic to crop from the original image, then resize each crop for inference
-- [x] Added crop batching and optional two-stage crop skipping to reduce repeated DINO forwards
 - [x] Run single-image local debugging with JSON overlay visualization
 - [x] Confirmed corrected implementation surfaces table / foreground objects that the old implementation missed
-- [x] Implement image pyramid construction (crop scales 1.0, 0.5)
+- [x] Implement image pyramid construction
 - [x] Run MaskCut at each scale
-- [x] Implement multi-scale proposal merging (IoU-based NMS)
-- [x] Regenerate pseudo-labels with multi-scale method on TinyImageNet-5 subset
-      — 2500 images, 24771 annotations (~9.9 masks/image)
-      — Output: pseudo_masks/tiny_imagenet/imagenet_train_fixsize480_tau0.2_N2_mc1.0-0.5_ov0.3_miou0.5_0_5.json
-      — Runtime: ~4h on A100 (gnode02), job 484052, 2026-04-28
-- [ ] Regenerate pseudo-labels with corrected original-crop projection / two-stage multi-crop job
-- [ ] Retrain detector on pseudo-labels, evaluate on COCO val2017 small+medium
-- [ ] Compare APs/APm vs CutLER baseline
+- [x] Implement initial multi-scale proposal merging with area filtering + IoU suppression
+- [ ] Regenerate pseudo-labels with multi-scale method
+- [ ] Retrain detector, evaluate — focus on APs (small object AP)
 
 ### Phase 4: Analysis & Write-up (upcoming)
 - [ ] Ablation: effect of each scale, merging strategy, number of iterations
@@ -69,12 +63,9 @@
 
 ## Blockers / Open Questions
 
-- TinyImageNet has extra `images/` subdirectory per class — patched in multiscale_maskcut.py
-- SLURM log paths must be absolute — patched in run_multiscale_maskcut.sh
-- REPO_ROOT must be hardcoded — patched in run_multiscale_maskcut.sh
-- dino.py unconditionally calls torch.hub for weights — patched to check os.path.isfile first
-- Full TinyImageNet (100k images) too slow at ~6s/img — using 5-class subset for now
-- Added incremental JSON checkpoint after each class folder to survive timeouts
+- Whether to keep the current IoU-suppression merge or replace it with Soft-NMS / weighted fusion.
+- Which crop scales and area thresholds best improve APs without exploding noisy masks.
+- How best to combine original CutLER MaskCut proposals with multi-scale proposals.
 
 ---
 
@@ -87,7 +78,6 @@
 - Before the fix, a strict run collapsed to a single coarse people-group foreground mask.
 - After the fix, the same image produced a richer set of masks including several foreground/table objects, indicating the implementation is now directionally aligned with the project goal.
 - Current merge logic is still heuristic and can produce partial or fragmented masks; further tuning or a stronger merge method is still needed.
-- Open merge questions: IoU suppression vs Soft-NMS / weighted fusion, crop-scale thresholds, and combining original CutLER proposals with multi-scale proposals.
 
 ---
 
@@ -130,17 +120,3 @@ Evaluated on COCO val2017, class-agnostic, unsupervised (no labels used).
 | numpy | <2 (pinned — detectron2 0.6 incompatible with numpy 2.x) |
 
 _Note: detectron2 must be installed from miropsota pre-built wheels. Building from source against torch 2.x fails due to removed `torch.cuda.amp` APIs. See `slurm/install_detectron2.sh`._
-
-### Pseudo-label comparison (2026-04-29)
-
-Single-scale vs multi-scale MaskCut on same 5 TinyImageNet classes (2500 images):
-
-| Metric | Single-scale | Multi-scale |
-|--------|-------------|-------------|
-| Annotations | 3,315 | 24,771 |
-| Masks/image | 1.33 | 9.91 |
-| Mean area | 993.6 | 374.4 |
-| Small (area<1024) | 1,875 (56.6%) | 23,433 (94.6%) |
-| Medium (1024-9216) | 1,440 (43.4%) | 1,338 (5.4%) |
-
-Multi-scale generates 7.5x more annotations, concentrated in small objects.
