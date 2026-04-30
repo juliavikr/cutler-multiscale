@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=16:00:00
+#SBATCH --time=05:00:00
 #SBATCH --output=logs/maskcut_multiscale_%j.out
 #SBATCH --error=logs/maskcut_multiscale_%j.err
 
@@ -43,7 +43,7 @@ python multiscale/multiscale_maskcut.py \
     --N "${N}" \
     --num-folder-per-job 200 \
     --job-index 0 \
-    --dataset-path "${HOME}/data/tiny-imagenet/tiny-imagenet-200/train/" \
+    --dataset-path "${HOME}/data/tiny-imagenet-sampled/train/" \
     --pretrain_path "${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
     --out-dir "${ANNO_DIR}" \
     --multi-crop \
@@ -57,7 +57,7 @@ python multiscale/multiscale_maskcut.py \
 # canonical output name.  The scales string uses hyphens in the filename.
 SCALES_TAG="${CROP_SCALES//,/-}"
 GENERATED="${ANNO_DIR}/imagenet_train_fixsize${FIXED_SIZE}_tau${TAU}_N${N}_mc${SCALES_TAG}_ov${CROP_OVERLAP}_miou${MERGE_IOU}.json"
-FINAL="${ANNO_DIR}/multiscale_pseudo.json"
+FINAL="${ANNO_DIR}/tinyimagenet_sampled_multiscale_pseudo.json"
 
 mv "${GENERATED}" "${FINAL}"
 

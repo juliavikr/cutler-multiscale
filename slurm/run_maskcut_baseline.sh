@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=08:00:00
+#SBATCH --time=05:00:00
 #SBATCH --output=logs/maskcut_baseline_%j.out
 #SBATCH --error=logs/maskcut_baseline_%j.err
 
@@ -35,7 +35,7 @@ python maskcut.py \
     --N 3 \
     --num-folder-per-job 200 \
     --job-index 0 \
-    --dataset-path "${HOME}/data/tiny-imagenet/tiny-imagenet-200/train/" \
+    --dataset-path "${HOME}/data/tiny-imagenet-sampled/train/" \
     --pretrain_path "${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
     --out-dir "${ANNO_DIR}"
 
@@ -44,11 +44,11 @@ echo "=== Merging per-folder JSONs ==="
 # missing folders 200-999 are expected and harmless for TinyImageNet.
 python merge_jsons.py \
     --base-dir "${ANNO_DIR}" \
-    --save-path "${ANNO_DIR}/tinyimagenet_train_baseline_pseudo.json" \
+    --save-path "${ANNO_DIR}/tinyimagenet_sampled_baseline_pseudo.json" \
     --num-folder-per-job 200 \
     --fixed-size 480 \
     --tau 0.15 \
     --N 3
 
 echo "=== Done ==="
-echo "Pseudo-labels saved to ${ANNO_DIR}/tinyimagenet_train_baseline_pseudo.json"
+echo "Pseudo-labels saved to ${ANNO_DIR}/tinyimagenet_sampled_baseline_pseudo.json"
