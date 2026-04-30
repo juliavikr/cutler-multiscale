@@ -41,9 +41,9 @@ python multiscale/multiscale_maskcut.py \
     --tau "${TAU}" \
     --fixed_size "${FIXED_SIZE}" \
     --N "${N}" \
-    --num-folder-per-job 200 \
+    --num-folder-per-job 50 \
     --job-index 0 \
-    --dataset-path "${HOME}/data/tiny-imagenet-sampled/train/" \
+    --dataset-path "${HOME}/data/tiny-imagenet-50classes/train/" \
     --pretrain_path "${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
     --out-dir "${ANNO_DIR}" \
     --multi-crop \
@@ -57,7 +57,7 @@ python multiscale/multiscale_maskcut.py \
 # canonical output name.  The scales string uses hyphens in the filename.
 SCALES_TAG="${CROP_SCALES//,/-}"
 GENERATED="${ANNO_DIR}/imagenet_train_fixsize${FIXED_SIZE}_tau${TAU}_N${N}_mc${SCALES_TAG}_ov${CROP_OVERLAP}_miou${MERGE_IOU}.json"
-FINAL="${ANNO_DIR}/tinyimagenet_sampled_multiscale_pseudo.json"
+FINAL="${ANNO_DIR}/tinyimagenet_50c_multiscale_pseudo.json"
 
 mv "${GENERATED}" "${FINAL}"
 

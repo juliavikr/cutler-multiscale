@@ -33,9 +33,9 @@ python maskcut.py \
     --tau 0.15 \
     --fixed_size 480 \
     --N 3 \
-    --num-folder-per-job 200 \
+    --num-folder-per-job 50 \
     --job-index 0 \
-    --dataset-path "${HOME}/data/tiny-imagenet-sampled/train/" \
+    --dataset-path "${HOME}/data/tiny-imagenet-50classes/train/" \
     --pretrain_path "${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
     --out-dir "${ANNO_DIR}"
 
@@ -44,11 +44,11 @@ echo "=== Merging per-folder JSONs ==="
 # missing folders 200-999 are expected and harmless for TinyImageNet.
 python merge_jsons.py \
     --base-dir "${ANNO_DIR}" \
-    --save-path "${ANNO_DIR}/tinyimagenet_sampled_baseline_pseudo.json" \
-    --num-folder-per-job 200 \
+    --save-path "${ANNO_DIR}/tinyimagenet_50c_baseline_pseudo.json" \
+    --num-folder-per-job 50 \
     --fixed-size 480 \
     --tau 0.15 \
     --N 3
 
 echo "=== Done ==="
-echo "Pseudo-labels saved to ${ANNO_DIR}/tinyimagenet_sampled_baseline_pseudo.json"
+echo "Pseudo-labels saved to ${ANNO_DIR}/tinyimagenet_50c_baseline_pseudo.json"
