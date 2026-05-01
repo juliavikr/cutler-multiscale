@@ -6,6 +6,56 @@
 
 ---
 
+## Locked Experiment Parameters
+
+Both the baseline (single-scale) and multi-scale MaskCut runs on TinyImageNet must use these identical parameters so the resulting pseudo-labels are directly comparable. Any change here invalidates the comparison and requires re-running both.
+
+### Shared parameters (baseline + multiscale)
+
+| Parameter | Value | Purpose |
+| --- | --- | --- |
+| --vit-arch | small | DINO ViT-Small backbone |
+| --vit-feat | k | use key features from attention |
+| --patch-size | 8 | 8×8 pixel patches |
+| --tau | 0.15 | affinity graph threshold |
+| --N | 3 | max masks discovered per image |
+| --fixed_size | 480 | resize input to 480×480 square |
+| --pretrain_path | ~/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth | DINO weights |
+
+### Multi-scale-only parameters (added on top for multiscale run)
+
+| Parameter | Value | Purpose |
+| --- | --- | --- |
+| --multi-crop | flag | enable multi-scale mode |
+| --crop-scales | 1.0,0.75,0.5 | three zoom levels |
+| --crop-overlap | 0.3 | sliding window overlap |
+| --merge-iou-thresh | 0.5 | NMS IoU threshold for deduplication |
+| --small-first | flag | prefer keeping small masks during NMS (helps APs) |
+
+### Dataset
+
+- Path: ~/data/tiny-imagenet-10classes/train/
+- Size: 10 classes × 50 images = 500 images total
+- Classes: (subset of TinyImageNet 200, deliberately diverse — animals, objects, vehicles, scenes)
+
+### Why 10 classes
+
+Baseline MaskCut on the A100 takes ~6-7 sec/image. Multi-scale runs the algorithm on the full image plus crops at 0.75× and 0.5× scales, processing roughly 10× as many MaskCut calls per image.
+
+Estimated runtimes:
+- Baseline on 500 images: ~1 hour
+- Multi-scale on 500 images: ~10 hours (fits within cluster's 24h time limit)
+- Multi-scale on 2500 images (50 classes): ~50 hours (would not fit)
+
+10 classes × 50 images is the largest TinyImageNet subset where both baseline and multi-scale can be run on the cluster, with margin for re-runs and parameter ablations. Detector training on 500 pseudo-labeled images is small but sufficient for a reproducible comparison.
+
+### Output JSONs (target locations)
+
+- Baseline: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json
+- Multi-scale: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json
+
+---
+
 ## Compute Environment
 
 **Cluster:** Bocconi University HPC (`slogin.hpc.unibocconi.it`)
