@@ -66,7 +66,8 @@ echo "  SLURM_JOB_ID      : ${SLURM_JOB_ID:-local}"
 
 cd "${HOME}/cutler-multiscale/CutLER/cutler"
 
-python train_net.py \
+# train_wrapper.py pre-registers our TinyImageNet datasets then runs train_net.py
+python "${HOME}/cutler-multiscale/tools/train_wrapper.py" \
     --num-gpus 1 \
     --config-file model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml \
     DATASETS.TRAIN "(\"tinyimagenet_${PSEUDO_LABEL_NAME}_pseudo\",)" \
