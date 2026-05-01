@@ -7,7 +7,6 @@ import argparse
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
-import re
 import datetime
 import PIL
 import PIL.Image as Image
@@ -316,6 +315,7 @@ def add_refined_masks_to_candidates(
 ):
     left, top, right, bottom = target_box
     orig_h, orig_w = output_shape
+    added = 0
 
     for bipartition in bipartitions:
         refined = postprocess_crop_mask(crop_resized, bipartition)
@@ -327,6 +327,8 @@ def add_refined_masks_to_candidates(
             full_mask[top:bottom, left:right], refined
         )
         candidates.append(full_mask)
+        added += 1
+    return added
 
 
 def binary_iou(mask_a, mask_b):
@@ -372,6 +374,8 @@ def compute_edge_density(image_array, top, left, bottom, right):
     if crop.size == 0:
         return 0.0
     gray = crop.mean(axis=2).astype(np.float32) if crop.ndim == 3 else crop.astype(np.float32)
+    if gray.shape[0] < 2 or gray.shape[1] < 2:
+        return 0.0
     gy = np.gradient(gray, axis=0)
     gx = np.gradient(gray, axis=1)
     return float(np.mean(np.sqrt(gx ** 2 + gy ** 2)))
@@ -387,8 +391,13 @@ def merge_masks(
     containment_thresh=0.7,
     box_expand_ratio=0.15,
     max_aspect_ratio=5.0,
+    protected_masks=None,
 ):
     """Graph-based mask merging.
+
+    Protected masks, usually full-image MaskCut proposals, are kept before crop
+    proposals. Crop proposals are merged among themselves, then appended only if
+    they are not near-duplicates of protected masks.
 
     Builds a graph where masks are nodes; edges connect masks that are
     near-duplicate (high IoU), partial overlaps (high IoS containment), or
@@ -396,21 +405,27 @@ def merge_masks(
     are merged by union, subject to a validity check (area and aspect ratio).
     A final dedup pass suppresses any residual near-duplicates across components.
     """
-    filtered = []
-    for m in candidates:
-        bm = m.astype(np.bool_)
-        area_ratio = float(bm.sum()) / float(bm.shape[0] * bm.shape[1])
-        if min_area_ratio <= area_ratio <= max_area_ratio:
-            filtered.append(bm)
+    def _filter_masks(masks):
+        filtered_masks = []
+        for m in masks:
+            bm = m.astype(np.bool_)
+            area_ratio = float(bm.sum()) / float(bm.shape[0] * bm.shape[1])
+            if min_area_ratio <= area_ratio <= max_area_ratio:
+                filtered_masks.append(bm)
+        return filtered_masks
+
+    protected = _filter_masks(protected_masks or [])
+    filtered = _filter_masks(candidates)
 
     if not filtered:
-        return []
+        return protected
 
     n = len(filtered)
     boxes = [mask_bbox(m) for m in filtered]
     total_px = filtered[0].shape[0] * filtered[0].shape[1]
 
-    # Build adjacency graph
+    # Build adjacency graph for crop proposals only. Full-image proposals stay
+    # protected and are used later as duplicate filters.
     adj = [set() for _ in range(n)]
     for i in range(n):
         for j in range(i + 1, n):
@@ -423,7 +438,7 @@ def merge_masks(
                 adj[i].add(j)
                 adj[j].add(i)
 
-    # BFS to collect connected components
+    # BFS to collect connected components.
     visited = [False] * n
     components = []
     for start in range(n):
@@ -441,7 +456,7 @@ def merge_masks(
                     queue.append(nb)
         components.append(comp)
 
-    # Merge each component; fall back to individual masks if union is invalid
+    # Merge each component; fall back to individual masks if union is invalid.
     merged_list = []
     for comp in components:
         if len(comp) == 1:
@@ -470,17 +485,22 @@ def merge_masks(
     else:
         merged_list.sort(key=lambda x: x[1], reverse=True)
 
-    # Final dedup: suppress near-identical masks that ended up in separate components
-    kept = []
+    # Final dedup. Protected full-image masks are never dropped by crop masks.
+    kept = list(protected)
+    crop_kept = 0
     for m, _ in merged_list:
         keep = True
         for km in kept:
-            if binary_iou(m, km) > merge_iou_thresh:
+            if (
+                binary_iou(m, km) > merge_iou_thresh
+                or intersection_over_smaller(m, km) > containment_thresh
+            ):
                 keep = False
                 break
         if keep:
             kept.append(m)
-        if keep_topk > 0 and len(kept) >= keep_topk:
+            crop_kept += 1
+        if keep_topk > 0 and crop_kept >= keep_topk:
             break
 
     return kept
@@ -517,6 +537,7 @@ def maskcut_multicrop(
     box_expand_ratio=0.15,
     merge_max_aspect_ratio=5.0,
     crop_top_k=0,
+    return_stats=False,
 ):
     if crop_scales is None:
         crop_scales = [1.0, 0.75, 0.5]
@@ -531,9 +552,20 @@ def maskcut_multicrop(
         max_windows_per_scale=max_windows_per_scale,
     )
 
-    candidates = []
+    protected_masks = []
+    crop_candidates = []
     covered_mask = np.zeros(output_shape, dtype=np.bool_)
     crop_items = []
+    stats = {
+        "full_masks": 0,
+        "total_windows": len(windows),
+        "skipped_covered": 0,
+        "eligible_windows": 0,
+        "ranked_windows": 0,
+        "crop_windows": 0,
+        "crop_candidates": 0,
+        "merged_masks": 0,
+    }
 
     if two_stage_crop:
         full_bipartitions, _, full_resized = maskcut_from_pil(
@@ -545,16 +577,15 @@ def maskcut_multicrop(
             fixed_size=fixed_size,
             cpu=cpu,
         )
-        before_full = len(candidates)
-        add_refined_masks_to_candidates(
-            candidates,
+        stats["full_masks"] = add_refined_masks_to_candidates(
+            protected_masks,
             full_bipartitions,
             full_resized,
             (0, 0, orig_w, orig_h),
             output_shape,
         )
-        if len(candidates) > before_full:
-            covered_mask = np.logical_or.reduce(candidates[before_full:])
+        if protected_masks:
+            covered_mask = np.logical_or.reduce(protected_masks)
 
     # Collect eligible windows (apply two-stage coverage filter inline so we
     # have projected boxes available for ranking without a second projection pass).
@@ -575,13 +606,15 @@ def maskcut_multicrop(
             crop_area = float((right - left) * (bottom - top))
             covered_ratio = covered_mask[top:bottom, left:right].sum() / crop_area
             if covered_ratio >= two_stage_max_covered_ratio:
+                stats["skipped_covered"] += 1
                 continue
 
         eligible.append((left, top, right, bottom))
+    stats["eligible_windows"] = len(eligible)
 
-    # Rank remaining windows by (unexplained coverage) × (edge detail) and keep top-k.
+    # Rank remaining windows by unexplained coverage times edge detail and keep top-k.
     # Unexplained coverage: fraction of the window NOT yet covered by full-image masks.
-    # Edge detail: mean gradient magnitude — high in textured/object-rich regions.
+    # Edge detail: mean gradient magnitude, high in textured/object-rich regions.
     if crop_top_k > 0 and len(eligible) > crop_top_k:
         img_array = np.array(I)
         cov_mask = covered_mask if two_stage_crop else None
@@ -595,12 +628,14 @@ def maskcut_multicrop(
 
         eligible.sort(key=_crop_score, reverse=True)
         eligible = eligible[:crop_top_k]
+    stats["ranked_windows"] = len(eligible)
 
     for left, top, right, bottom in eligible:
         crop_items.append({
             "crop": I.crop((left, top, right, bottom)),
             "box": (left, top, right, bottom),
         })
+    stats["crop_windows"] = len(crop_items)
 
     crop_results = maskcut_from_pil_batch(
         [item["crop"] for item in crop_items],
@@ -613,8 +648,8 @@ def maskcut_multicrop(
         batch_size=crop_batch_size,
     )
     for item, (bipartitions, _, crop_resized) in zip(crop_items, crop_results):
-        add_refined_masks_to_candidates(
-            candidates,
+        stats["crop_candidates"] += add_refined_masks_to_candidates(
+            crop_candidates,
             bipartitions,
             crop_resized,
             item["box"],
@@ -622,7 +657,7 @@ def maskcut_multicrop(
         )
 
     merged = merge_masks(
-        candidates=candidates,
+        candidates=crop_candidates,
         merge_iou_thresh=merge_iou_thresh,
         keep_topk=keep_topk,
         min_area_ratio=min_area_ratio,
@@ -631,19 +666,17 @@ def maskcut_multicrop(
         containment_thresh=containment_thresh,
         box_expand_ratio=box_expand_ratio,
         max_aspect_ratio=merge_max_aspect_ratio,
+        protected_masks=protected_masks,
     )
+    stats["merged_masks"] = len(merged)
+    if return_stats:
+        return merged, I, stats
     return merged, I
 
 def resize_binary_mask(array, new_size):
     image = Image.fromarray(array.astype(np.uint8)*255)
     image = image.resize(new_size, PIL.Image.NEAREST)
     return np.asarray(image).astype(np.bool_)
-
-def close_contour(contour):
-    if not np.array_equal(contour[0], contour[-1]):
-        contour = np.vstack((contour, contour[0]))
-    return contour
-
 
 def create_image_info(image_id, file_name, image_size, 
                       date_captured=datetime.datetime.utcnow().isoformat(' '),
@@ -746,9 +779,6 @@ CATEGORIES = [
     },
 ]
 
-convert = lambda text: int(text) if text.isdigit() else text.lower()
-natrual_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
-
 output = {
         "info": INFO,
         "licenses": LICENSES,
@@ -786,17 +816,18 @@ if __name__ == "__main__":
     parser.add_argument('--crop-overlap', type=float, default=0.3, help='overlap ratio between adjacent windows in multi-crop mode')
     parser.add_argument('--crop-max-per-scale', type=int, default=0, help='limit number of windows per scale (0 keeps all)')
     parser.add_argument('--merge-iou-thresh', type=float, default=0.5, help='IoU threshold for mask merging in multi-crop mode')
-    parser.add_argument('--keep-topk', type=int, default=0, help='max masks kept per image after merge (0 keeps all)')
+    parser.add_argument('--keep-topk', type=int, default=0, help='max crop masks kept after merge; protected full-image masks are always kept (0 keeps all crop masks)')
     parser.add_argument('--min-mask-area-ratio', type=float, default=0.0005, help='min mask area ratio in fixed-size canvas')
     parser.add_argument('--max-mask-area-ratio', type=float, default=1.0, help='max mask area ratio in fixed-size canvas')
     parser.add_argument('--small-first', action='store_true', help='prefer smaller masks first when merging (helps APs)')
     parser.add_argument('--two-stage-crop', action='store_true', help='run full-image MaskCut first and skip crop windows already covered by that foreground')
     parser.add_argument('--two-stage-max-covered-ratio', type=float, default=0.9, help='skip crop windows whose area is covered by full-stage masks at or above this ratio')
     parser.add_argument('--crop-batch-size', type=int, default=8, help='number of crop images per DINO forward pass in multi-crop mode')
-    parser.add_argument('--containment-thresh', type=float, default=0.7, help='intersection-over-smaller threshold: connect masks where one covers ≥ this fraction of the other')
+    parser.add_argument('--containment-thresh', type=float, default=0.7, help='intersection-over-smaller threshold: connect masks where one covers at least this fraction of the other')
     parser.add_argument('--box-expand-ratio', type=float, default=0.15, help='expand bounding boxes by this fraction when testing adjacency between mask fragments')
     parser.add_argument('--merge-max-aspect-ratio', type=float, default=5.0, help='reject a merged mask if its bounding box aspect ratio exceeds this (catches bad cross-object unions)')
     parser.add_argument('--crop-top-k', type=int, default=0, help='after two-stage coverage filtering, keep only the top-k crop windows ranked by unexplained detail (0 = keep all)')
+    parser.add_argument('--log-every', type=int, default=50, help='print aggregate multi-crop stats every this many processed images (0 disables)')
 
     args = parser.parse_args()
     crop_scales = parse_float_list(args.crop_scales)
@@ -830,6 +861,17 @@ if __name__ == "__main__":
 
     image_id, segmentation_id = 1, 1
     image_names = []
+    processed_images = 0
+    multicrop_totals = {
+        "full_masks": 0,
+        "total_windows": 0,
+        "skipped_covered": 0,
+        "eligible_windows": 0,
+        "ranked_windows": 0,
+        "crop_windows": 0,
+        "crop_candidates": 0,
+        "merged_masks": 0,
+    }
     for img_folder in img_folders[start_idx:end_idx]:
         args.img_dir = os.path.join(args.dataset_path, img_folder)
         if os.path.isdir(os.path.join(args.img_dir, "images")):
@@ -842,7 +884,7 @@ if __name__ == "__main__":
             # get pseudo-masks for each image using MaskCut
             try:
                 if args.multi_crop:
-                    bipartitions, I_new = maskcut_multicrop(
+                    bipartitions, I_new, multicrop_stats = maskcut_multicrop(
                         img_path,
                         backbone,
                         args.patch_size,
@@ -865,13 +907,31 @@ if __name__ == "__main__":
                         box_expand_ratio=args.box_expand_ratio,
                         merge_max_aspect_ratio=args.merge_max_aspect_ratio,
                         crop_top_k=args.crop_top_k,
+                        return_stats=True,
                     )
                 else:
                     bipartitions, _, I_new = maskcut(img_path, backbone, args.patch_size, \
                         args.tau, N=args.N, fixed_size=args.fixed_size, cpu=args.cpu)
-            except:
-                print(f'Skipping {img_name}')
+            except Exception as exc:
+                print(f'Skipping {img_name}: {exc}')
                 continue
+            if args.multi_crop:
+                for key, value in multicrop_stats.items():
+                    multicrop_totals[key] += value
+                processed_images += 1
+                if args.log_every > 0 and processed_images % args.log_every == 0:
+                    print(
+                        "Multi-crop stats after {} images: full_masks={}, "
+                        "windows={} skipped={} ranked={} crop_candidates={} merged={}".format(
+                            processed_images,
+                            multicrop_totals["full_masks"],
+                            multicrop_totals["total_windows"],
+                            multicrop_totals["skipped_covered"],
+                            multicrop_totals["ranked_windows"],
+                            multicrop_totals["crop_candidates"],
+                            multicrop_totals["merged_masks"],
+                        )
+                    )
 
             I = Image.open(img_path).convert('RGB')
             width, height = I.size
@@ -933,4 +993,17 @@ if __name__ == "__main__":
     with open(json_name, 'w') as output_json_file:
         json.dump(output, output_json_file)
     print(f'dumping {json_name}')
+    if args.multi_crop and processed_images > 0:
+        print(
+            "Final multi-crop stats: images={} full_masks={} windows={} "
+            "skipped={} ranked={} crop_candidates={} merged={}".format(
+                processed_images,
+                multicrop_totals["full_masks"],
+                multicrop_totals["total_windows"],
+                multicrop_totals["skipped_covered"],
+                multicrop_totals["ranked_windows"],
+                multicrop_totals["crop_candidates"],
+                multicrop_totals["merged_masks"],
+            )
+        )
     print("Done: {} images; {} anns.".format(len(output['images']), len(output['annotations'])))

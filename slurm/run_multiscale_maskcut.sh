@@ -43,6 +43,11 @@ SMALL_FIRST="${SMALL_FIRST:-1}"
 TWO_STAGE_CROP="${TWO_STAGE_CROP:-1}"
 TWO_STAGE_MAX_COVERED_RATIO="${TWO_STAGE_MAX_COVERED_RATIO:-0.9}"
 CROP_BATCH_SIZE="${CROP_BATCH_SIZE:-8}"
+CONTAINMENT_THRESH="${CONTAINMENT_THRESH:-0.7}"
+BOX_EXPAND_RATIO="${BOX_EXPAND_RATIO:-0.15}"
+MERGE_MAX_ASPECT_RATIO="${MERGE_MAX_ASPECT_RATIO:-5.0}"
+CROP_TOP_K="${CROP_TOP_K:-0}"
+LOG_EVERY="${LOG_EVERY:-50}"
 
 EXTRA_ARGS=(
   --multi-crop
@@ -55,6 +60,11 @@ EXTRA_ARGS=(
   --max-mask-area-ratio "${MAX_MASK_AREA_RATIO}"
   --two-stage-max-covered-ratio "${TWO_STAGE_MAX_COVERED_RATIO}"
   --crop-batch-size "${CROP_BATCH_SIZE}"
+  --containment-thresh "${CONTAINMENT_THRESH}"
+  --box-expand-ratio "${BOX_EXPAND_RATIO}"
+  --merge-max-aspect-ratio "${MERGE_MAX_ASPECT_RATIO}"
+  --crop-top-k "${CROP_TOP_K}"
+  --log-every "${LOG_EVERY}"
 )
 
 if [ "${SMALL_FIRST}" = "1" ]; then
