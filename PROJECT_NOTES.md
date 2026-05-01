@@ -36,7 +36,18 @@ Both the baseline (single-scale) and multi-scale MaskCut runs on TinyImageNet mu
 
 - Path: ~/data/tiny-imagenet-10classes/train/
 - Size: 10 classes × 50 images = 500 images total
-- Classes: (subset of TinyImageNet 200, deliberately diverse — animals, objects, vehicles, scenes)
+- Classes used (TinyImageNet WordNet IDs):
+  - n01443537 (goldfish)
+  - n02123045 (tabby cat)
+  - n02281406 (sulphur butterfly)
+  - n02410509 (bison)
+  - n02906734 (broom)
+  - n03100240 (convertible)
+  - n03444034 (go-kart)
+  - n04067472 (reel)
+  - n04254777 (sock)
+  - n07711569 (mashed potato)
+- These were chosen for visual diversity across animals, vehicles, and household objects. Verified contents on cluster: 10 folders × 50 images = 500 total images at ~/data/tiny-imagenet-10classes/train/.
 
 ### Why 10 classes
 
