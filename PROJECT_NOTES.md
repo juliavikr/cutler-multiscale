@@ -48,6 +48,11 @@
 - [x] Added crop batching and optional two-stage crop skipping to reduce repeated DINO forwards
 - [x] Run single-image local debugging with JSON overlay visualization
 - [x] Confirmed corrected implementation surfaces table / foreground objects that the old implementation missed
+- [x] Keep split outputs for normal, raw multiscale, merged multiscale, and combined masks
+- [x] Default primary multi-crop JSON to multiscale-only so combined masks are not used for training by accident
+- [x] Add DINO feature-contrast heatmap crop proposal mode as an alternative to grid crops
+- [x] Replace area-first crop selection with scored mask candidates and preset-based defaults
+- [x] Emit candidate debug JSON with crop boxes, crop scores, mask scores, area, compactness, border touch, and overlap metadata
 - [x] Implement image pyramid construction (crop scales 1.0, 0.5)
 - [x] Run MaskCut at each scale
 - [x] Implement multi-scale proposal merging (IoU-based NMS)
@@ -88,6 +93,12 @@
 - After the fix, the same image produced a richer set of masks including several foreground/table objects, indicating the implementation is now directionally aligned with the project goal.
 - Current merge logic is still heuristic and can produce partial or fragmented masks; further tuning or a stronger merge method is still needed.
 - Open merge questions: IoU suppression vs Soft-NMS / weighted fusion, crop-scale thresholds, and combining original CutLER proposals with multi-scale proposals.
+- Newer runs write four multi-crop views: `normal`, `raw_multiscale`, `multiscale`, and `combined`.
+- Use `multiscale` as the training/evaluation candidate for now; `combined` is diagnostic until overlap hierarchy is handled better.
+- Heatmap crop mode uses one full-image DINO feature-contrast pass to rank crop proposals before running crop MaskCut.
+- Current default is `--ms-preset small`: heatmap crops, small-mask area cap, score-first merge/top-K, and `multiscale` as the primary output.
+- The candidate scorer ranks crop masks by small-object area prior, compactness, crop score, CRF agreement, border touch, aspect ratio, and duplicate overlap with normal masks.
+- Advanced thresholds remain available as overrides, but normal experiments should start from `--ms-preset small` or `--ms-preset balanced` instead of tuning every knob.
 
 ---
 

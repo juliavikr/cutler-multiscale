@@ -27,45 +27,72 @@ DINO_WEIGHTS="${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth"
 
 mkdir -p "${OUT_DIR}"
 
-# --- Multi-scale MaskCut knobs (override via env) ---
+# --- Core experiment knobs (override via env) ---
 TAU="${TAU:-0.2}"
 N_MASKS="${N_MASKS:-3}"
 FIXED_SIZE="${FIXED_SIZE:-480}"
 USE_CPU="${USE_CPU:-0}"
-CROP_SCALES="${CROP_SCALES:-1.0,0.75,0.5}"
-CROP_OVERLAP="${CROP_OVERLAP:-0.3}"
-CROP_MAX_PER_SCALE="${CROP_MAX_PER_SCALE:-9}"
-MERGE_IOU_THRESH="${MERGE_IOU_THRESH:-0.5}"
-KEEP_TOPK="${KEEP_TOPK:-20}"
-MIN_MASK_AREA_RATIO="${MIN_MASK_AREA_RATIO:-0.0005}"
-MAX_MASK_AREA_RATIO="${MAX_MASK_AREA_RATIO:-1.0}"
-SMALL_FIRST="${SMALL_FIRST:-1}"
-TWO_STAGE_CROP="${TWO_STAGE_CROP:-1}"
-TWO_STAGE_MAX_COVERED_RATIO="${TWO_STAGE_MAX_COVERED_RATIO:-0.9}"
+MS_PRESET="${MS_PRESET:-small}"
 CROP_BATCH_SIZE="${CROP_BATCH_SIZE:-8}"
-CONTAINMENT_THRESH="${CONTAINMENT_THRESH:-0.7}"
-BOX_EXPAND_RATIO="${BOX_EXPAND_RATIO:-0.15}"
-MERGE_MAX_ASPECT_RATIO="${MERGE_MAX_ASPECT_RATIO:-5.0}"
-CROP_TOP_K="${CROP_TOP_K:-0}"
+PRIMARY_OUTPUT="${PRIMARY_OUTPUT:-multiscale}"
 LOG_EVERY="${LOG_EVERY:-50}"
+
+# Optional advanced overrides. Leave unset to use --ms-preset.
+CROP_MODE="${CROP_MODE:-}"
+CROP_SCALES="${CROP_SCALES:-}"
+CROP_OVERLAP="${CROP_OVERLAP:-}"
+CROP_MAX_PER_SCALE="${CROP_MAX_PER_SCALE:-}"
+MERGE_IOU_THRESH="${MERGE_IOU_THRESH:-}"
+KEEP_TOPK="${KEEP_TOPK:-}"
+MIN_MASK_AREA_RATIO="${MIN_MASK_AREA_RATIO:-}"
+MAX_MASK_AREA_RATIO="${MAX_MASK_AREA_RATIO:-}"
+SMALL_FIRST="${SMALL_FIRST:-0}"
+TWO_STAGE_CROP="${TWO_STAGE_CROP:-}"
+TWO_STAGE_MAX_COVERED_RATIO="${TWO_STAGE_MAX_COVERED_RATIO:-}"
+CONTAINMENT_THRESH="${CONTAINMENT_THRESH:-}"
+BOX_EXPAND_RATIO="${BOX_EXPAND_RATIO:-}"
+MERGE_MAX_ASPECT_RATIO="${MERGE_MAX_ASPECT_RATIO:-}"
+CROP_TOP_K="${CROP_TOP_K:-}"
+HEATMAP_CROP_SIZES="${HEATMAP_CROP_SIZES:-}"
+HEATMAP_TOP_K="${HEATMAP_TOP_K:-}"
+HEATMAP_NMS_IOU="${HEATMAP_NMS_IOU:-}"
+HEATMAP_PERCENTILE="${HEATMAP_PERCENTILE:-}"
+CRF_IOU_THRESH="${CRF_IOU_THRESH:-}"
 
 EXTRA_ARGS=(
   --multi-crop
-  --crop-scales "${CROP_SCALES}"
-  --crop-overlap "${CROP_OVERLAP}"
-  --crop-max-per-scale "${CROP_MAX_PER_SCALE}"
-  --merge-iou-thresh "${MERGE_IOU_THRESH}"
-  --keep-topk "${KEEP_TOPK}"
-  --min-mask-area-ratio "${MIN_MASK_AREA_RATIO}"
-  --max-mask-area-ratio "${MAX_MASK_AREA_RATIO}"
-  --two-stage-max-covered-ratio "${TWO_STAGE_MAX_COVERED_RATIO}"
+  --ms-preset "${MS_PRESET}"
   --crop-batch-size "${CROP_BATCH_SIZE}"
-  --containment-thresh "${CONTAINMENT_THRESH}"
-  --box-expand-ratio "${BOX_EXPAND_RATIO}"
-  --merge-max-aspect-ratio "${MERGE_MAX_ASPECT_RATIO}"
-  --crop-top-k "${CROP_TOP_K}"
+  --primary-output "${PRIMARY_OUTPUT}"
   --log-every "${LOG_EVERY}"
 )
+
+add_arg_if_set() {
+  local value="$1"
+  shift
+  if [ -n "${value}" ]; then
+    EXTRA_ARGS+=("$@" "${value}")
+  fi
+}
+
+add_arg_if_set "${CROP_MODE}" --crop-mode
+add_arg_if_set "${CROP_SCALES}" --crop-scales
+add_arg_if_set "${CROP_OVERLAP}" --crop-overlap
+add_arg_if_set "${CROP_MAX_PER_SCALE}" --crop-max-per-scale
+add_arg_if_set "${MERGE_IOU_THRESH}" --merge-iou-thresh
+add_arg_if_set "${KEEP_TOPK}" --keep-topk
+add_arg_if_set "${MIN_MASK_AREA_RATIO}" --min-mask-area-ratio
+add_arg_if_set "${MAX_MASK_AREA_RATIO}" --max-mask-area-ratio
+add_arg_if_set "${TWO_STAGE_MAX_COVERED_RATIO}" --two-stage-max-covered-ratio
+add_arg_if_set "${CONTAINMENT_THRESH}" --containment-thresh
+add_arg_if_set "${BOX_EXPAND_RATIO}" --box-expand-ratio
+add_arg_if_set "${MERGE_MAX_ASPECT_RATIO}" --merge-max-aspect-ratio
+add_arg_if_set "${CROP_TOP_K}" --crop-top-k
+add_arg_if_set "${HEATMAP_CROP_SIZES}" --heatmap-crop-sizes
+add_arg_if_set "${HEATMAP_TOP_K}" --heatmap-top-k
+add_arg_if_set "${HEATMAP_NMS_IOU}" --heatmap-nms-iou
+add_arg_if_set "${HEATMAP_PERCENTILE}" --heatmap-percentile
+add_arg_if_set "${CRF_IOU_THRESH}" --crf-iou-thresh
 
 if [ "${SMALL_FIRST}" = "1" ]; then
   EXTRA_ARGS+=(--small-first)
@@ -76,7 +103,6 @@ fi
 if [ "${USE_CPU}" = "1" ]; then
   EXTRA_ARGS+=(--cpu)
 fi
-
 python "${REPO_ROOT}/multiscale/multiscale_maskcut.py" \
     --vit-arch small \
     --vit-feat k \
