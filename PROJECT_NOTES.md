@@ -144,3 +144,22 @@ Single-scale vs multi-scale MaskCut on same 5 TinyImageNet classes (2500 images)
 | Medium (1024-9216) | 1,440 (43.4%) | 1,338 (5.4%) |
 
 Multi-scale generates 7.5x more annotations, concentrated in small objects.
+
+### Code Update: Graph-based merging + crop ranking (2026-05-01)
+
+**Graph-based mask merging** (`merge_masks`, lines 380-486):
+- Old: greedy NMS — if IoU > threshold, drop newer mask
+- New: build a graph, connect masks if ANY of:
+  - IoU > `--merge-iou-thresh` (0.5) — near-duplicate
+  - Intersection/smaller > `--containment-thresh` (0.7) — one contains the other
+  - Expanded bounding boxes overlap with `--box-expand-ratio` (0.15) — adjacent fragments
+- Connected components are unioned, only committed if area ≤ `--max-mask-area-ratio` and aspect ratio ≤ `--merge-max-aspect-ratio` (5.0)
+
+**Crop ranking** (inside `maskcut_multicrop`, lines 582-597):
+- Old: binary skip/keep by coverage ratio
+- New: score each window by (1 - coverage_ratio) × (1 + edge_density/128), keep top-N
+- Edge density = mean gradient magnitude — high in textured/object-rich areas
+
+**To run with new features:**
+TWO_STAGE_CROP=1 CROP_SCALES=1.0,0.75,0.5 N_MASKS=3 sbatch slurm/run_multiscale_maskcut.sh
+Use `--crop-top-k 8` to keep only 8 most informative windows per image.
