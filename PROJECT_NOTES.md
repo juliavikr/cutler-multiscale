@@ -65,6 +65,16 @@ Estimated runtimes:
 - Baseline: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json
 - Multi-scale: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json
 
+### Generated artifacts
+
+| Artifact | Status | Location (cluster) | Size | Images | Annotations | Generated |
+|----------|--------|--------------------|------|--------|-------------|-----------|
+| Baseline pseudo-labels | **exists** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json` | 321 KB | 500 | 748 | 2026-05-01 |
+| Multiscale pseudo-labels | **pending** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json` | — | — | — | pending Luiz's finalization |
+
+These JSONs are not committed to Git (regeneratable, and excluded by `.gitignore`).
+To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
+
 ---
 
 ## Compute Environment
