@@ -85,6 +85,7 @@ MULTISCALE_PRESETS = {
         "crop_mode": "heatmap",
         "heatmap_crop_sizes": "0.25,0.35,0.5",
         "heatmap_top_k": 12,
+        "heatmap_spatial_rescue": 4,
         "keep_topk": 12,
         "min_mask_area_ratio": 0.0001,
         "max_mask_area_ratio": 0.02,
@@ -98,6 +99,7 @@ MULTISCALE_PRESETS = {
         "crop_mode": "heatmap",
         "heatmap_crop_sizes": "0.35,0.5,0.75",
         "heatmap_top_k": 16,
+        "heatmap_spatial_rescue": 4,
         "keep_topk": 20,
         "min_mask_area_ratio": 0.0001,
         "max_mask_area_ratio": 0.05,
@@ -111,6 +113,7 @@ MULTISCALE_PRESETS = {
         "crop_mode": "grid",
         "heatmap_crop_sizes": "0.35,0.5,0.75",
         "heatmap_top_k": 12,
+        "heatmap_spatial_rescue": 0,
         "keep_topk": 20,
         "min_mask_area_ratio": 0.0001,
         "max_mask_area_ratio": 0.25,
@@ -135,6 +138,7 @@ def apply_multiscale_preset(args):
         "crop_mode": "--crop-mode",
         "heatmap_crop_sizes": "--heatmap-crop-sizes",
         "heatmap_top_k": "--heatmap-top-k",
+        "heatmap_spatial_rescue": "--heatmap-spatial-rescue",
         "keep_topk": "--keep-topk",
         "min_mask_area_ratio": "--min-mask-area-ratio",
         "max_mask_area_ratio": "--max-mask-area-ratio",
@@ -408,6 +412,7 @@ def add_refined_masks_to_candidates(
     crf_iou_thresh=0.3,
     source="crop",
     crop_score=0.0,
+    crop_reason=None,
     protected_masks=None,
 ):
     left, top, right, bottom = target_box
@@ -428,6 +433,7 @@ def add_refined_masks_to_candidates(
             source=source,
             crop_box=target_box,
             crop_score=crop_score,
+            crop_reason=crop_reason,
             protected_masks=protected_masks,
             crf_iou=crf_iou,
         ))
@@ -553,6 +559,7 @@ def make_mask_candidate(
     source,
     crop_box=None,
     crop_score=0.0,
+    crop_reason=None,
     protected_masks=None,
     crf_iou=1.0,
 ):
@@ -581,6 +588,7 @@ def make_mask_candidate(
     meta = {
         "source": source,
         "crop_box": list(crop_box) if crop_box is not None else None,
+        "crop_reason": crop_reason,
         "crop_score": float(crop_score),
         "mask_score": float(score),
         "area": area,
@@ -747,6 +755,120 @@ def score_heatmap_box(heatmap, box, orig_w, orig_h, covered_mask, image_array):
     return (1.5 * object_mean) + object_max + (2.0 * object_mean * (1.0 - coverage)) + (0.5 * edge / 128.0) - border_penalty
 
 
+def heatmap_patch_bounds(box, orig_w, orig_h, heatmap_w, heatmap_h):
+    left, top, right, bottom = box
+    x1 = max(0, min(heatmap_w - 1, int(np.floor(left / orig_w * heatmap_w))))
+    x2 = max(x1 + 1, min(heatmap_w, int(np.ceil(right / orig_w * heatmap_w))))
+    y1 = max(0, min(heatmap_h - 1, int(np.floor(top / orig_h * heatmap_h))))
+    y2 = max(y1 + 1, min(heatmap_h, int(np.ceil(bottom / orig_h * heatmap_h))))
+    return x1, y1, x2, y2
+
+
+def heatmap_point_to_image_xy(x, y, heatmap_w, heatmap_h, orig_w, orig_h):
+    return (x + 0.5) / heatmap_w * orig_w, (y + 0.5) / heatmap_h * orig_h
+
+
+def build_spatial_rescue_boxes(
+    heatmap,
+    sizes,
+    orig_w,
+    orig_h,
+    selected_boxes,
+    nms_iou,
+    covered_mask,
+    image_array,
+    rescue_k,
+):
+    if rescue_k <= 0:
+        return []
+
+    h, w = heatmap.shape
+    rescue_candidates = []
+    grid_cols = 3
+    grid_rows = 3
+
+    selected_centers = []
+    for left, top, right, bottom in selected_boxes:
+        selected_centers.append(((left + right) / 2.0, (top + bottom) / 2.0))
+
+    for row in range(grid_rows):
+        cell_top = int(round(row * orig_h / grid_rows))
+        cell_bottom = int(round((row + 1) * orig_h / grid_rows))
+        for col in range(grid_cols):
+            cell_left = int(round(col * orig_w / grid_cols))
+            cell_right = int(round((col + 1) * orig_w / grid_cols))
+            has_center = any(
+                cell_left <= cx < cell_right and cell_top <= cy < cell_bottom
+                for cx, cy in selected_centers
+            )
+            if has_center:
+                continue
+
+            cell_cx = (cell_left + cell_right) / 2.0
+            cell_cy = (cell_top + cell_bottom) / 2.0
+            if selected_centers:
+                nearest = min(
+                    np.hypot(cell_cx - sx, cell_cy - sy)
+                    for sx, sy in selected_centers
+                )
+                distance_bonus = min(0.4, nearest / max(1.0, np.hypot(orig_w, orig_h)) * 0.8)
+            else:
+                distance_bonus = 0.4
+
+            hx1, hy1, hx2, hy2 = heatmap_patch_bounds(
+                (cell_left, cell_top, cell_right, cell_bottom),
+                orig_w,
+                orig_h,
+                w,
+                h,
+            )
+            patch = heatmap[hy1:hy2, hx1:hx2]
+            if patch.size:
+                local_flat = int(np.argmax(patch))
+                local_y, local_x = np.unravel_index(local_flat, patch.shape)
+                peak_x = hx1 + local_x
+                peak_y = hy1 + local_y
+                peak_score = float(patch[local_y, local_x])
+                cx, cy = heatmap_point_to_image_xy(peak_x, peak_y, w, h, orig_w, orig_h)
+            else:
+                peak_score = 0.0
+                cx = (cell_left + cell_right) / 2.0
+                cy = (cell_top + cell_bottom) / 2.0
+
+            # Try smaller rescue crops first. They are cheaper to filter later
+            # and better match the small-object branch's purpose.
+            for size in sizes[:max(1, min(2, len(sizes)))]:
+                box = clip_square_box(cx, cy, size, orig_w, orig_h)
+                if any(box_iou(box, kept) > nms_iou for kept in selected_boxes):
+                    continue
+                crop_area = max(1, (box[2] - box[0]) * (box[3] - box[1]))
+                coverage = 0.0
+                if covered_mask is not None and covered_mask.any():
+                    coverage = float(covered_mask[box[1]:box[3], box[0]:box[2]].sum()) / crop_area
+                edge = compute_edge_density(image_array, box[1], box[0], box[3], box[2])
+                edge_cell_bonus = 0.15 if col in (0, grid_cols - 1) or row in (0, grid_rows - 1) else 0.0
+                score = (
+                    score_heatmap_box(heatmap, box, orig_w, orig_h, covered_mask, image_array)
+                    + 0.5 * peak_score
+                    + 0.4 * (1.0 - coverage)
+                    + 0.3 * edge / 128.0
+                    + edge_cell_bonus
+                    + distance_bonus
+                )
+                rescue_candidates.append((score, box))
+
+    rescue_candidates.sort(key=lambda item: item[0], reverse=True)
+    selected = []
+    for score, box in rescue_candidates:
+        if any(box_iou(box, kept) > nms_iou for kept in selected_boxes):
+            continue
+        selected.append({"box": box, "score": float(score), "reason": "spatial_rescue"})
+        selected_boxes.append(box)
+        if len(selected) >= rescue_k:
+            break
+    return selected
+
+
 def generate_heatmap_windows(
     I,
     backbone,
@@ -757,6 +879,7 @@ def generate_heatmap_windows(
     top_k,
     nms_iou,
     percentile,
+    spatial_rescue=0,
     cpu=False,
 ):
     orig_w, orig_h = I.size
@@ -768,6 +891,10 @@ def generate_heatmap_windows(
     peak_indices = np.argsort(heatmap.ravel())[::-1]
     raw_boxes = []
     h, w = heatmap.shape
+    if spatial_rescue < 0:
+        spatial_rescue = max(2, int(round(top_k * 0.25))) if top_k > 0 else 0
+    spatial_rescue = min(max(0, int(spatial_rescue)), max(0, int(top_k)))
+    heatmap_budget = max(0, int(top_k) - spatial_rescue) if top_k > 0 else 0
     max_peaks = max(top_k * 10, 50) if top_k > 0 else 200
     for flat_idx in peak_indices:
         score = heatmap.ravel()[flat_idx]
@@ -788,10 +915,33 @@ def generate_heatmap_windows(
     for score, box in raw_boxes:
         if any(box_iou(box, kept) > nms_iou for kept in selected_boxes):
             continue
-        selected.append({"box": box, "score": float(score)})
+        selected.append({"box": box, "score": float(score), "reason": "heatmap"})
         selected_boxes.append(box)
-        if top_k > 0 and len(selected) >= top_k:
+        if heatmap_budget > 0 and len(selected) >= heatmap_budget:
             break
+        if top_k <= 0:
+            continue
+
+    selected.extend(build_spatial_rescue_boxes(
+        heatmap,
+        sizes,
+        orig_w,
+        orig_h,
+        selected_boxes,
+        nms_iou,
+        covered_mask,
+        image_array,
+        spatial_rescue,
+    ))
+
+    if top_k > 0 and len(selected) < top_k:
+        for score, box in raw_boxes:
+            if any(box_iou(box, kept) > nms_iou for kept in selected_boxes):
+                continue
+            selected.append({"box": box, "score": float(score), "reason": "heatmap_fill"})
+            selected_boxes.append(box)
+            if len(selected) >= top_k:
+                break
     return selected
 
 
@@ -885,6 +1035,7 @@ def merge_mask_candidates(
                 source="merged_multiscale",
                 crop_box=best_member.crop_box,
                 crop_score=best_member.crop_score,
+                crop_reason=best_member.meta.get("crop_reason"),
                 protected_masks=protected,
                 crf_iou=best_member.meta.get("crf_iou", 1.0),
             )
@@ -1087,6 +1238,7 @@ def maskcut_multicrop(
     heatmap_top_k=12,
     heatmap_nms_iou=0.4,
     heatmap_percentile=85.0,
+    heatmap_spatial_rescue=4,
     crf_iou_thresh=0.3,
     return_stats=False,
     return_splits=False,
@@ -1111,6 +1263,7 @@ def maskcut_multicrop(
         "skipped_covered": 0,
         "eligible_windows": 0,
         "ranked_windows": 0,
+        "rescue_windows": 0,
         "crop_windows": 0,
         "crop_candidates": 0,
         "crop_merged_masks": 0,
@@ -1155,11 +1308,13 @@ def maskcut_multicrop(
             top_k,
             heatmap_nms_iou,
             heatmap_percentile,
+            spatial_rescue=heatmap_spatial_rescue,
             cpu=cpu,
         )
         stats["total_windows"] = len(eligible)
         stats["eligible_windows"] = len(eligible)
         stats["ranked_windows"] = len(eligible)
+        stats["rescue_windows"] = sum(1 for item in eligible if item.get("reason") == "spatial_rescue")
     else:
         windows = generate_windows(
             image_size=fixed_size,
@@ -1218,6 +1373,7 @@ def maskcut_multicrop(
             "crop": I.crop((left, top, right, bottom)),
             "box": (left, top, right, bottom),
             "crop_score": item.get("score", 0.0),
+            "crop_reason": item.get("reason", "grid"),
         })
     stats["crop_windows"] = len(crop_items)
 
@@ -1241,6 +1397,7 @@ def maskcut_multicrop(
             crf_iou_thresh=crf_iou_thresh,
             source="raw_multiscale",
             crop_score=item.get("crop_score", 0.0),
+            crop_reason=item.get("crop_reason"),
             protected_masks=protected_masks,
         )
 
@@ -1493,6 +1650,7 @@ if __name__ == "__main__":
     parser.add_argument('--heatmap-top-k', type=int, default=12, help='number of DINO heatmap crop proposals when crop-top-k is 0')
     parser.add_argument('--heatmap-nms-iou', type=float, default=0.4, help='crop-box NMS IoU for heatmap crop proposals')
     parser.add_argument('--heatmap-percentile', type=float, default=85.0, help='minimum feature-contrast percentile considered for heatmap crop peaks')
+    parser.add_argument('--heatmap-spatial-rescue', type=int, default=-1, help='number of heatmap crop slots reserved for under-covered spatial cells (-1 uses preset/auto)')
     parser.add_argument('--crf-iou-thresh', type=float, default=0.3, help='minimum IoU between raw MaskCut mask and CRF-refined mask for accepting crop proposals')
     parser.add_argument('--primary-output', type=str, default='multiscale', choices=['normal', 'raw_multiscale', 'multiscale', 'combined'], help='which split is written to the unsuffixed JSON/checkpoint in multi-crop mode')
     parser.add_argument('--write-split-outputs', action='store_true', help='legacy flag; split outputs are always written in multi-crop mode')
@@ -1539,6 +1697,7 @@ if __name__ == "__main__":
         "skipped_covered": 0,
         "eligible_windows": 0,
         "ranked_windows": 0,
+        "rescue_windows": 0,
         "crop_windows": 0,
         "crop_candidates": 0,
         "crop_merged_masks": 0,
@@ -1594,6 +1753,7 @@ if __name__ == "__main__":
                         heatmap_top_k=args.heatmap_top_k,
                         heatmap_nms_iou=args.heatmap_nms_iou,
                         heatmap_percentile=args.heatmap_percentile,
+                        heatmap_spatial_rescue=args.heatmap_spatial_rescue,
                         crf_iou_thresh=args.crf_iou_thresh,
                         return_stats=True,
                         return_splits=True,
@@ -1613,12 +1773,13 @@ if __name__ == "__main__":
                 if args.log_every > 0 and processed_images % args.log_every == 0:
                     print(
                         "Multi-crop stats after {} images: full_masks={}, "
-                        "windows={} skipped={} ranked={} crop_candidates={} scored={} crop_merged={} merged={}".format(
+                        "windows={} skipped={} ranked={} rescue={} crop_candidates={} scored={} crop_merged={} merged={}".format(
                             processed_images,
                             multicrop_totals["full_masks"],
                             multicrop_totals["total_windows"],
                             multicrop_totals["skipped_covered"],
                             multicrop_totals["ranked_windows"],
+                            multicrop_totals["rescue_windows"],
                             multicrop_totals["crop_candidates"],
                             multicrop_totals["scored_candidates"],
                             multicrop_totals["crop_merged_masks"],
@@ -1690,10 +1851,11 @@ if __name__ == "__main__":
     crop_tag = ''
     if args.multi_crop:
         if args.crop_mode == 'heatmap':
-            crop_tag = '_heatmap_hs{}_hp{}_hk{}_miou{}'.format(
+            crop_tag = '_heatmap_hs{}_hp{}_hk{}_sr{}_miou{}'.format(
                 args.heatmap_crop_sizes.replace(',', '-'),
                 args.heatmap_percentile,
                 args.heatmap_top_k,
+                args.heatmap_spatial_rescue,
                 args.merge_iou_thresh,
             )
         else:
@@ -1735,12 +1897,13 @@ if __name__ == "__main__":
     if args.multi_crop and processed_images > 0:
         print(
             "Final multi-crop stats: images={} full_masks={} windows={} "
-            "skipped={} ranked={} crop_candidates={} scored={} crop_merged={} merged={}".format(
+            "skipped={} ranked={} rescue={} crop_candidates={} scored={} crop_merged={} merged={}".format(
                 processed_images,
                 multicrop_totals["full_masks"],
                 multicrop_totals["total_windows"],
                 multicrop_totals["skipped_covered"],
                 multicrop_totals["ranked_windows"],
+                multicrop_totals["rescue_windows"],
                 multicrop_totals["crop_candidates"],
                 multicrop_totals["scored_candidates"],
                 multicrop_totals["crop_merged_masks"],

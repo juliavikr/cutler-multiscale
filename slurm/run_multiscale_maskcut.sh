@@ -57,6 +57,7 @@ HEATMAP_CROP_SIZES="${HEATMAP_CROP_SIZES:-}"
 HEATMAP_TOP_K="${HEATMAP_TOP_K:-}"
 HEATMAP_NMS_IOU="${HEATMAP_NMS_IOU:-}"
 HEATMAP_PERCENTILE="${HEATMAP_PERCENTILE:-}"
+HEATMAP_SPATIAL_RESCUE="${HEATMAP_SPATIAL_RESCUE:-}"
 CRF_IOU_THRESH="${CRF_IOU_THRESH:-}"
 
 EXTRA_ARGS=(
@@ -92,6 +93,7 @@ add_arg_if_set "${HEATMAP_CROP_SIZES}" --heatmap-crop-sizes
 add_arg_if_set "${HEATMAP_TOP_K}" --heatmap-top-k
 add_arg_if_set "${HEATMAP_NMS_IOU}" --heatmap-nms-iou
 add_arg_if_set "${HEATMAP_PERCENTILE}" --heatmap-percentile
+add_arg_if_set "${HEATMAP_SPATIAL_RESCUE}" --heatmap-spatial-rescue
 add_arg_if_set "${CRF_IOU_THRESH}" --crf-iou-thresh
 
 if [ "${SMALL_FIRST}" = "1" ]; then
