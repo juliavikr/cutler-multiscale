@@ -6,6 +6,77 @@
 
 ---
 
+## Locked Experiment Parameters
+
+Both the baseline (single-scale) and multi-scale MaskCut runs on TinyImageNet must use these identical parameters so the resulting pseudo-labels are directly comparable. Any change here invalidates the comparison and requires re-running both.
+
+### Shared parameters (baseline + multiscale)
+
+| Parameter | Value | Purpose |
+| --- | --- | --- |
+| --vit-arch | small | DINO ViT-Small backbone |
+| --vit-feat | k | use key features from attention |
+| --patch-size | 8 | 8×8 pixel patches |
+| --tau | 0.15 | affinity graph threshold |
+| --N | 3 | max masks discovered per image |
+| --fixed_size | 480 | resize input to 480×480 square |
+| --pretrain_path | ~/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth | DINO weights |
+
+### Multi-scale-only parameters (added on top for multiscale run)
+
+| Parameter | Value | Purpose |
+| --- | --- | --- |
+| --multi-crop | flag | enable multi-scale mode |
+| --crop-scales | 1.0,0.75,0.5 | three zoom levels |
+| --crop-overlap | 0.3 | sliding window overlap |
+| --merge-iou-thresh | 0.5 | NMS IoU threshold for deduplication |
+| --small-first | flag | prefer keeping small masks during NMS (helps APs) |
+
+### Dataset
+
+- Path: ~/data/tiny-imagenet-10classes/train/
+- Size: 10 classes × 50 images = 500 images total
+- Classes used (TinyImageNet WordNet IDs):
+  - n01443537 (goldfish)
+  - n02123045 (tabby cat)
+  - n02281406 (sulphur butterfly)
+  - n02410509 (bison)
+  - n02906734 (broom)
+  - n03100240 (convertible)
+  - n03444034 (go-kart)
+  - n04067472 (reel)
+  - n04254777 (sock)
+  - n07711569 (mashed potato)
+- These were chosen for visual diversity across animals, vehicles, and household objects. Verified contents on cluster: 10 folders × 50 images = 500 total images at ~/data/tiny-imagenet-10classes/train/.
+
+### Why 10 classes
+
+Baseline MaskCut on the A100 takes ~6-7 sec/image. Multi-scale runs the algorithm on the full image plus crops at 0.75× and 0.5× scales, processing roughly 10× as many MaskCut calls per image.
+
+Estimated runtimes:
+- Baseline on 500 images: ~1 hour
+- Multi-scale on 500 images: ~10 hours (fits within cluster's 24h time limit)
+- Multi-scale on 2500 images (50 classes): ~50 hours (would not fit)
+
+10 classes × 50 images is the largest TinyImageNet subset where both baseline and multi-scale can be run on the cluster, with margin for re-runs and parameter ablations. Detector training on 500 pseudo-labeled images is small but sufficient for a reproducible comparison.
+
+### Output JSONs (target locations)
+
+- Baseline: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json
+- Multi-scale: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json
+
+### Generated artifacts
+
+| Artifact | Status | Location (cluster) | Size | Images | Annotations | Generated |
+|----------|--------|--------------------|------|--------|-------------|-----------|
+| Baseline pseudo-labels | **exists** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json` | 321 KB | 500 | 748 | 2026-05-01 |
+| Multiscale pseudo-labels | **pending** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json` | — | — | — | pending Luiz's finalization |
+
+These JSONs are not committed to Git (regeneratable, and excluded by `.gitignore`).
+To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
+
+---
+
 ## Compute Environment
 
 **Cluster:** Bocconi University HPC (`slogin.hpc.unibocconi.it`)
@@ -155,3 +226,22 @@ Single-scale vs multi-scale MaskCut on same 5 TinyImageNet classes (2500 images)
 | Medium (1024-9216) | 1,440 (43.4%) | 1,338 (5.4%) |
 
 Multi-scale generates 7.5x more annotations, concentrated in small objects.
+
+### Code Update: Graph-based merging + crop ranking (2026-05-01)
+
+**Graph-based mask merging** (`merge_masks`, lines 380-486):
+- Old: greedy NMS — if IoU > threshold, drop newer mask
+- New: build a graph, connect masks if ANY of:
+  - IoU > `--merge-iou-thresh` (0.5) — near-duplicate
+  - Intersection/smaller > `--containment-thresh` (0.7) — one contains the other
+  - Expanded bounding boxes overlap with `--box-expand-ratio` (0.15) — adjacent fragments
+- Connected components are unioned, only committed if area ≤ `--max-mask-area-ratio` and aspect ratio ≤ `--merge-max-aspect-ratio` (5.0)
+
+**Crop ranking** (inside `maskcut_multicrop`, lines 582-597):
+- Old: binary skip/keep by coverage ratio
+- New: score each window by (1 - coverage_ratio) × (1 + edge_density/128), keep top-N
+- Edge density = mean gradient magnitude — high in textured/object-rich areas
+
+**To run with new features:**
+TWO_STAGE_CROP=1 CROP_SCALES=1.0,0.75,0.5 N_MASKS=3 sbatch slurm/run_multiscale_maskcut.sh
+Use `--crop-top-k 8` to keep only 8 most informative windows per image.
