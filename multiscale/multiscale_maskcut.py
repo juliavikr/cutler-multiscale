@@ -109,6 +109,31 @@ MULTISCALE_PRESETS = {
         "two_stage_crop": True,
         "primary_output": "multiscale",
     },
+    "mostlite": {
+        "crop_mode": "mostlite",
+        "heatmap_crop_sizes": "0.25,0.35,0.5",
+        "heatmap_top_k": 12,
+        "heatmap_spatial_rescue": 0,
+        "mostlite_percentile": 78.0,
+        "mostlite_sim_percentile": 92.0,
+        "crop_N": 1,
+        "crop_keep_per_window": 1,
+        "border_retry": True,
+        "border_retry_scales": "1.4,1.8",
+        "border_retry_touch_thresh": 0.5,
+        "border_retry_sides_thresh": 2,
+        "crop_shape_reject": True,
+        "crop_fill_thresh": 0.9,
+        "crf_iou_thresh": 0.5,
+        "keep_topk": 12,
+        "min_mask_area_ratio": 0.0001,
+        "max_mask_area_ratio": 0.02,
+        "containment_thresh": 0.85,
+        "box_expand_ratio": 0.05,
+        "merge_max_aspect_ratio": 3.0,
+        "two_stage_crop": True,
+        "primary_output": "multiscale",
+    },
     "legacy": {
         "crop_mode": "grid",
         "heatmap_crop_sizes": "0.35,0.5,0.75",
@@ -135,22 +160,33 @@ def apply_multiscale_preset(args):
         return
     preset = MULTISCALE_PRESETS.get(args.ms_preset, {})
     flag_names = {
-        "crop_mode": "--crop-mode",
-        "heatmap_crop_sizes": "--heatmap-crop-sizes",
-        "heatmap_top_k": "--heatmap-top-k",
-        "heatmap_spatial_rescue": "--heatmap-spatial-rescue",
-        "keep_topk": "--keep-topk",
-        "min_mask_area_ratio": "--min-mask-area-ratio",
-        "max_mask_area_ratio": "--max-mask-area-ratio",
-        "containment_thresh": "--containment-thresh",
-        "box_expand_ratio": "--box-expand-ratio",
-        "merge_max_aspect_ratio": "--merge-max-aspect-ratio",
-        "two_stage_crop": "--two-stage-crop",
-        "primary_output": "--primary-output",
+        "crop_mode": ("--crop-mode",),
+        "heatmap_crop_sizes": ("--heatmap-crop-sizes",),
+        "heatmap_top_k": ("--heatmap-top-k",),
+        "heatmap_spatial_rescue": ("--heatmap-spatial-rescue",),
+        "mostlite_percentile": ("--mostlite-percentile",),
+        "mostlite_sim_percentile": ("--mostlite-sim-percentile",),
+        "crop_N": ("--crop-N", "--crop-n"),
+        "crop_keep_per_window": ("--crop-keep-per-window",),
+        "border_retry": ("--border-retry",),
+        "border_retry_scales": ("--border-retry-scales",),
+        "border_retry_touch_thresh": ("--border-retry-touch-thresh",),
+        "border_retry_sides_thresh": ("--border-retry-sides-thresh",),
+        "crop_shape_reject": ("--crop-shape-reject",),
+        "crop_fill_thresh": ("--crop-fill-thresh",),
+        "crf_iou_thresh": ("--crf-iou-thresh",),
+        "keep_topk": ("--keep-topk",),
+        "min_mask_area_ratio": ("--min-mask-area-ratio",),
+        "max_mask_area_ratio": ("--max-mask-area-ratio",),
+        "containment_thresh": ("--containment-thresh",),
+        "box_expand_ratio": ("--box-expand-ratio",),
+        "merge_max_aspect_ratio": ("--merge-max-aspect-ratio",),
+        "two_stage_crop": ("--two-stage-crop",),
+        "primary_output": ("--primary-output",),
     }
     for attr, value in preset.items():
-        flag = flag_names[attr]
-        if not cli_flag_was_set(flag):
+        flags = flag_names[attr]
+        if not any(cli_flag_was_set(flag) for flag in flags):
             setattr(args, attr, value)
 
 def get_affinity_matrix(feats, tau, eps=1e-5):
@@ -538,6 +574,110 @@ def crop_border_metrics(mask, crop_box):
     return border_touch, int(sum(sides))
 
 
+def crop_internal_border_metrics(mask, crop_box):
+    if crop_box is None:
+        return 0.0, 0
+    left, top, right, bottom = crop_box
+    orig_h, orig_w = mask.shape
+    top = max(0, min(top, orig_h - 1))
+    bottom = max(top + 1, min(bottom, orig_h))
+    left = max(0, min(left, orig_w - 1))
+    right = max(left + 1, min(right, orig_w))
+
+    crop_mask = mask[top:bottom, left:right]
+    area = int(crop_mask.sum())
+    if area == 0:
+        return 0.0, 0
+
+    side_defs = [
+        (bool(crop_mask[0, :].any()), top == 0, int(crop_mask[0, :].sum())),
+        (bool(crop_mask[-1, :].any()), bottom == orig_h, int(crop_mask[-1, :].sum())),
+        (bool(crop_mask[:, 0].any()), left == 0, int(crop_mask[:, 0].sum())),
+        (bool(crop_mask[:, -1].any()), right == orig_w, int(crop_mask[:, -1].sum())),
+    ]
+    internal_sides = [touches for touches, is_image_border, _ in side_defs if not is_image_border]
+    internal_border_pixels = sum(
+        pixels for touches, is_image_border, pixels in side_defs
+        if touches and not is_image_border
+    )
+    internal_touch = min(1.0, float(internal_border_pixels) / float(max(1.0, np.sqrt(area))))
+    return internal_touch, int(sum(internal_sides))
+
+
+def crop_fill_metrics(mask, crop_box):
+    if crop_box is None:
+        return 0.0, 0.0, 0.0
+    bbox = mask_bbox(mask)
+    if bbox is None:
+        return 0.0, 0.0, 0.0
+    rmin, cmin, rmax, cmax = bbox
+    left, top, right, bottom = crop_box
+    crop_w = max(1, right - left)
+    crop_h = max(1, bottom - top)
+    fill_w = float(cmax - cmin + 1) / float(crop_w)
+    fill_h = float(rmax - rmin + 1) / float(crop_h)
+    return float(max(fill_w, fill_h)), float(fill_w), float(fill_h)
+
+
+def mask_centroid(mask):
+    ys, xs = np.where(mask)
+    if len(xs) == 0:
+        return None
+    return float(xs.mean()), float(ys.mean())
+
+
+def proposal_alignment_metrics(mask, proposal_mask):
+    if proposal_mask is None:
+        return {
+            "proposal_alignment": 0.0,
+            "proposal_iou": 0.0,
+            "proposal_recall": 0.0,
+            "proposal_precision": 0.0,
+            "proposal_center_score": 0.0,
+        }
+
+    proposal = proposal_mask.astype(np.bool_)
+    if proposal.shape != mask.shape or not proposal.any() or not mask.any():
+        return {
+            "proposal_alignment": 0.0,
+            "proposal_iou": 0.0,
+            "proposal_recall": 0.0,
+            "proposal_precision": 0.0,
+            "proposal_center_score": 0.0,
+        }
+
+    inter = float(np.logical_and(mask, proposal).sum())
+    union = float(np.logical_or(mask, proposal).sum())
+    proposal_area = float(proposal.sum())
+    mask_area = float(mask.sum())
+    proposal_iou = inter / union if union > 0 else 0.0
+    proposal_recall = inter / proposal_area if proposal_area > 0 else 0.0
+    proposal_precision = inter / mask_area if mask_area > 0 else 0.0
+
+    mask_center = mask_centroid(mask)
+    proposal_center = mask_centroid(proposal)
+    if mask_center is None or proposal_center is None:
+        center_score = 0.0
+    else:
+        diag = max(1.0, np.hypot(mask.shape[0], mask.shape[1]))
+        distance = np.hypot(mask_center[0] - proposal_center[0], mask_center[1] - proposal_center[1])
+        center_score = float(1.0 - min(1.0, distance / (0.25 * diag)))
+
+    alignment = (
+        0.45 * proposal_recall +
+        0.25 * proposal_precision +
+        0.20 * center_score +
+        0.10 * proposal_iou
+    )
+    return {
+        "proposal_alignment": float(alignment),
+        "proposal_iou": float(proposal_iou),
+        "proposal_recall": float(proposal_recall),
+        "proposal_precision": float(proposal_precision),
+        "proposal_center_score": float(center_score),
+    }
+
+
 def max_binary_iou(mask, others):
     best = 0.0
     for other in unwrap_masks(others):
@@ -562,6 +702,8 @@ def make_mask_candidate(
     crop_reason=None,
     protected_masks=None,
     crf_iou=1.0,
+    proposal_mask=None,
+    retry_scale=1.0,
 ):
     bm = mask.astype(np.bool_)
     area = int(bm.sum())
@@ -569,19 +711,27 @@ def make_mask_candidate(
     compactness = mask_compactness(bm)
     aspect_ratio = mask_aspect_ratio(bm)
     border_touch, border_sides = crop_border_metrics(bm, crop_box)
+    internal_border_touch, internal_border_sides = crop_internal_border_metrics(bm, crop_box)
+    crop_fill, crop_fill_w, crop_fill_h = crop_fill_metrics(bm, crop_box)
+    alignment = proposal_alignment_metrics(bm, proposal_mask)
     normal_iou = max_binary_iou(bm, protected_masks) if protected_masks else 0.0
     crop_prior = float(np.clip(crop_score / 4.0, 0.0, 1.0))
     area_prior = small_object_area_prior(area_ratio)
     aspect_penalty = float(np.clip((aspect_ratio - 3.0) / 4.0, 0.0, 1.0))
-    border_penalty = max(border_touch, border_sides / 4.0)
+    border_penalty = max(internal_border_touch, internal_border_sides / 4.0)
+    crop_shape_penalty = 0.0
+    if internal_border_sides >= 2 and crop_fill > 0.75:
+        crop_shape_penalty = float(np.clip((crop_fill - 0.75) / 0.25, 0.0, 1.0))
 
     score = (
         1.4 * area_prior +
         1.1 * compactness +
         0.7 * crop_prior +
+        0.8 * alignment["proposal_alignment"] +
         0.5 * float(np.clip(crf_iou, 0.0, 1.0)) -
         1.0 * aspect_penalty -
-        0.9 * border_penalty -
+        1.2 * border_penalty -
+        1.0 * crop_shape_penalty -
         0.6 * normal_iou
     )
 
@@ -599,6 +749,18 @@ def make_mask_candidate(
         "area_prior": float(area_prior),
         "border_touch": float(border_touch),
         "border_sides": int(border_sides),
+        "internal_border_touch": float(internal_border_touch),
+        "internal_border_sides": int(internal_border_sides),
+        "crop_fill": float(crop_fill),
+        "crop_fill_w": float(crop_fill_w),
+        "crop_fill_h": float(crop_fill_h),
+        "crop_shape_penalty": float(crop_shape_penalty),
+        "proposal_alignment": float(alignment["proposal_alignment"]),
+        "proposal_iou": float(alignment["proposal_iou"]),
+        "proposal_recall": float(alignment["proposal_recall"]),
+        "proposal_precision": float(alignment["proposal_precision"]),
+        "proposal_center_score": float(alignment["proposal_center_score"]),
+        "retry_scale": float(retry_scale),
         "normal_iou": float(normal_iou),
         "crf_iou": float(crf_iou),
     }
@@ -696,7 +858,16 @@ def compute_edge_density(image_array, top, left, bottom, right):
     return float(np.mean(np.sqrt(gx ** 2 + gy ** 2)))
 
 
-def compute_feature_contrast_heatmap(I, backbone, patch_size, fixed_size, cpu=False):
+def normalize_score_map(values):
+    values = values.astype(np.float32)
+    values = values - values.min()
+    max_value = values.max()
+    if max_value > 0:
+        values = values / max_value
+    return values
+
+
+def extract_dino_feature_grid(I, backbone, patch_size, fixed_size, cpu=False):
     _, tensor, _, _, feat_w, feat_h = prepare_maskcut_input(I, patch_size, fixed_size)
     tensor = tensor.unsqueeze(0)
     if not cpu:
@@ -704,8 +875,11 @@ def compute_feature_contrast_heatmap(I, backbone, patch_size, fixed_size, cpu=Fa
     with torch.no_grad():
         feat = backbone(tensor)[0]
     feat = F.normalize(feat, p=2, dim=0).detach().cpu().numpy()
-    feat = feat.reshape(feat.shape[0], feat_h, feat_w)
+    return feat.reshape(feat.shape[0], feat_h, feat_w)
 
+
+def compute_feature_contrast_from_grid(feat):
+    _, feat_h, feat_w = feat.shape
     heatmap = np.zeros((feat_h, feat_w), dtype=np.float32)
     counts = np.zeros((feat_h, feat_w), dtype=np.float32)
     for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
@@ -726,11 +900,12 @@ def compute_feature_contrast_heatmap(I, backbone, patch_size, fixed_size, cpu=Fa
         counts[y_src_start:y_src_end, x_src_start:x_src_end] += 1.0
 
     heatmap = heatmap / np.maximum(counts, 1.0)
-    heatmap -= heatmap.min()
-    max_value = heatmap.max()
-    if max_value > 0:
-        heatmap /= max_value
-    return heatmap
+    return normalize_score_map(heatmap)
+
+
+def compute_feature_contrast_heatmap(I, backbone, patch_size, fixed_size, cpu=False):
+    feat = extract_dino_feature_grid(I, backbone, patch_size, fixed_size, cpu=cpu)
+    return compute_feature_contrast_from_grid(feat)
 
 
 def score_heatmap_box(heatmap, box, orig_w, orig_h, covered_mask, image_array):
@@ -942,6 +1117,179 @@ def generate_heatmap_windows(
             selected_boxes.append(box)
             if len(selected) >= top_k:
                 break
+    return selected
+
+
+def objectness_from_feature_grid(feat, covered_mask, orig_w, orig_h):
+    contrast = compute_feature_contrast_from_grid(feat)
+    _, h, w = feat.shape
+    border = np.zeros((h, w), dtype=np.bool_)
+    border[0, :] = True
+    border[-1, :] = True
+    border[:, 0] = True
+    border[:, -1] = True
+    bg_proto = feat[:, border].mean(axis=1)
+    bg_norm = np.linalg.norm(bg_proto)
+    if bg_norm > 0:
+        bg_proto = bg_proto / bg_norm
+    bg_distance = 1.0 - np.sum(feat * bg_proto[:, None, None], axis=0)
+    bg_distance = normalize_score_map(bg_distance)
+    objectness = normalize_score_map((0.55 * contrast) + (0.45 * bg_distance))
+
+    if covered_mask is not None and covered_mask.any():
+        covered_patch = np.zeros((h, w), dtype=np.float32)
+        for yy in range(h):
+            y1 = int(round(yy * orig_h / h))
+            y2 = int(round((yy + 1) * orig_h / h))
+            for xx in range(w):
+                x1 = int(round(xx * orig_w / w))
+                x2 = int(round((xx + 1) * orig_w / w))
+                patch = covered_mask[y1:y2, x1:x2]
+                covered_patch[yy, xx] = float(patch.mean()) if patch.size else 0.0
+        objectness = objectness * (1.0 - 0.45 * covered_patch)
+        objectness = normalize_score_map(objectness)
+    return objectness
+
+
+def choose_crop_size_for_component(component_box, sizes, orig_w, orig_h, feat_w, feat_h):
+    x1, y1, x2, y2 = component_box
+    box_w = max(1.0, (x2 - x1) / feat_w * orig_w)
+    box_h = max(1.0, (y2 - y1) / feat_h * orig_h)
+    target = max(box_w, box_h) * 2.4
+    for size in sizes:
+        if size >= target:
+            return size
+    return sizes[-1]
+
+
+def component_to_image_box(component_box, orig_w, orig_h, feat_w, feat_h):
+    x1, y1, x2, y2 = component_box
+    left = int(np.floor(x1 / feat_w * orig_w))
+    top = int(np.floor(y1 / feat_h * orig_h))
+    right = int(np.ceil(x2 / feat_w * orig_w))
+    bottom = int(np.ceil(y2 / feat_h * orig_h))
+    left = max(0, min(left, orig_w - 1))
+    top = max(0, min(top, orig_h - 1))
+    right = max(left + 1, min(right, orig_w))
+    bottom = max(top + 1, min(bottom, orig_h))
+    return left, top, right, bottom
+
+
+def component_to_full_mask(component, orig_w, orig_h):
+    return resize_binary_mask(component.astype(np.bool_), (orig_w, orig_h))
+
+
+def generate_mostlite_windows(
+    I,
+    backbone,
+    patch_size,
+    fixed_size,
+    crop_sizes,
+    covered_mask,
+    top_k,
+    nms_iou,
+    percentile,
+    sim_percentile,
+    cpu=False,
+):
+    """MOST-inspired proposal mode using DINO token clusters.
+
+    This keeps the implementation lightweight: seed foreground-like tokens from
+    full-image DINO features, expand each seed by feature-similar connected
+    tokens, then convert compact token clusters into crop boxes for MaskCut.
+    """
+    orig_w, orig_h = I.size
+    image_array = np.array(I)
+    feat = extract_dino_feature_grid(I, backbone, patch_size, fixed_size, cpu=cpu)
+    _, feat_h, feat_w = feat.shape
+    sizes = crop_sizes_to_pixels(crop_sizes, orig_w, orig_h)
+    objectness = objectness_from_feature_grid(feat, covered_mask, orig_w, orig_h)
+
+    threshold = np.percentile(objectness, percentile)
+    seed_order = np.argsort(objectness.ravel())[::-1]
+    flat_feat = feat.reshape(feat.shape[0], -1).T
+    selected = []
+    selected_boxes = []
+    used_seed_mask = np.zeros((feat_h, feat_w), dtype=np.bool_)
+    proposals = []
+    max_seeds = max(top_k * 25, 120) if top_k > 0 else 250
+
+    for flat_idx in seed_order:
+        seed_score = float(objectness.ravel()[flat_idx])
+        if seed_score < threshold and len(proposals) >= max_seeds // 2:
+            break
+        sy, sx = np.unravel_index(flat_idx, objectness.shape)
+        if used_seed_mask[sy, sx]:
+            continue
+
+        sim = flat_feat @ flat_feat[flat_idx]
+        sim_map = sim.reshape(feat_h, feat_w)
+        sim_thresh = max(0.35, float(np.percentile(sim, sim_percentile)))
+        region = (sim_map >= sim_thresh) & (objectness >= np.percentile(objectness, max(50.0, percentile - 18.0)))
+        if not region[sy, sx]:
+            region = sim_map >= sim_thresh
+
+        labels, num_labels = ndimage.label(region)
+        label_id = labels[sy, sx]
+        if label_id == 0:
+            continue
+        component = labels == label_id
+        component_area = int(component.sum())
+        if component_area < 2 or component_area > int(0.28 * feat_h * feat_w):
+            continue
+
+        ys, xs = np.where(component)
+        x1, x2 = int(xs.min()), int(xs.max() + 1)
+        y1, y2 = int(ys.min()), int(ys.max() + 1)
+        component_box = (x1, y1, x2, y2)
+        image_box = component_to_image_box(component_box, orig_w, orig_h, feat_w, feat_h)
+        cx = (image_box[0] + image_box[2]) / 2.0
+        cy = (image_box[1] + image_box[3]) / 2.0
+        crop_size = choose_crop_size_for_component(component_box, sizes, orig_w, orig_h, feat_w, feat_h)
+        crop_box = clip_square_box(cx, cy, crop_size, orig_w, orig_h)
+
+        if any(box_iou(crop_box, kept) > nms_iou for kept in selected_boxes):
+            used_seed_mask[component] = True
+            continue
+
+        bbox_area = max(1, (x2 - x1) * (y2 - y1))
+        compactness = component_area / bbox_area
+        crop_area = max(1, (crop_box[2] - crop_box[0]) * (crop_box[3] - crop_box[1]))
+        coverage = 0.0
+        if covered_mask is not None and covered_mask.any():
+            coverage = float(covered_mask[crop_box[1]:crop_box[3], crop_box[0]:crop_box[2]].sum()) / crop_area
+        edge = compute_edge_density(image_array, crop_box[1], crop_box[0], crop_box[3], crop_box[2])
+        component_objectness = float(objectness[component].mean())
+        component_similarity = float(sim_map[component].mean())
+        crop_score = (
+            1.4 * component_objectness
+            + 0.8 * seed_score
+            + 0.7 * compactness
+            + 0.4 * component_similarity
+            + 0.3 * edge / 128.0
+            - 0.6 * coverage
+        )
+        proposals.append((crop_score, crop_box, component.copy(), component_area, image_box))
+        used_seed_mask[component] = True
+        if len(proposals) >= max_seeds:
+            break
+
+    proposals.sort(key=lambda item: item[0], reverse=True)
+    for score, box, component, component_area, image_box in proposals:
+        if any(box_iou(box, kept) > nms_iou for kept in selected_boxes):
+            continue
+        selected.append({
+            "box": box,
+            "score": float(score),
+            "reason": "mostlite",
+            "proposal_mask": component_to_full_mask(component, orig_w, orig_h),
+            "proposal_area": int(component_area),
+            "proposal_box": list(image_box),
+        })
+        selected_boxes.append(box)
+        if top_k > 0 and len(selected) >= top_k:
+            break
+
     return selected
 
 
@@ -1229,6 +1577,8 @@ def maskcut_multicrop(
     two_stage_crop=False,
     two_stage_max_covered_ratio=0.9,
     crop_batch_size=8,
+    crop_N=0,
+    crop_keep_per_window=0,
     containment_thresh=0.85,
     box_expand_ratio=0.05,
     merge_max_aspect_ratio=3.0,
@@ -1239,6 +1589,14 @@ def maskcut_multicrop(
     heatmap_nms_iou=0.4,
     heatmap_percentile=85.0,
     heatmap_spatial_rescue=4,
+    mostlite_percentile=78.0,
+    mostlite_sim_percentile=92.0,
+    border_retry=False,
+    border_retry_scales=None,
+    border_retry_touch_thresh=0.5,
+    border_retry_sides_thresh=2,
+    crop_shape_reject=False,
+    crop_fill_thresh=0.9,
     crf_iou_thresh=0.3,
     return_stats=False,
     return_splits=False,
@@ -1248,6 +1606,12 @@ def maskcut_multicrop(
         crop_scales = [1.0, 0.75, 0.5]
     if heatmap_crop_sizes is None:
         heatmap_crop_sizes = [0.25, 0.35, 0.5]
+    if border_retry_scales is None:
+        border_retry_scales = [1.4, 1.8]
+    elif isinstance(border_retry_scales, str):
+        border_retry_scales = parse_float_list(border_retry_scales)
+    crop_N = N if crop_N is None or crop_N <= 0 else int(crop_N)
+    crop_keep_per_window = max(0, int(crop_keep_per_window))
 
     I = Image.open(img_path).convert("RGB")
     orig_w, orig_h = I.size
@@ -1265,10 +1629,13 @@ def maskcut_multicrop(
         "ranked_windows": 0,
         "rescue_windows": 0,
         "crop_windows": 0,
+        "generated_crop_candidates": 0,
         "crop_candidates": 0,
         "crop_merged_masks": 0,
         "merged_masks": 0,
         "scored_candidates": 0,
+        "border_retry_windows": 0,
+        "crop_shape_rejected": 0,
     }
 
     if two_stage_crop:
@@ -1296,7 +1663,25 @@ def maskcut_multicrop(
             covered_mask = np.logical_or.reduce(unwrap_masks(protected_masks))
 
     eligible = []
-    if crop_mode == "heatmap":
+    if crop_mode == "mostlite":
+        top_k = crop_top_k if crop_top_k > 0 else heatmap_top_k
+        eligible = generate_mostlite_windows(
+            I,
+            backbone,
+            patch_size,
+            fixed_size,
+            heatmap_crop_sizes,
+            covered_mask,
+            top_k,
+            heatmap_nms_iou,
+            mostlite_percentile,
+            mostlite_sim_percentile,
+            cpu=cpu,
+        )
+        stats["total_windows"] = len(eligible)
+        stats["eligible_windows"] = len(eligible)
+        stats["ranked_windows"] = len(eligible)
+    elif crop_mode == "heatmap":
         top_k = crop_top_k if crop_top_k > 0 else heatmap_top_k
         eligible = generate_heatmap_windows(
             I,
@@ -1374,6 +1759,9 @@ def maskcut_multicrop(
             "box": (left, top, right, bottom),
             "crop_score": item.get("score", 0.0),
             "crop_reason": item.get("reason", "grid"),
+            "proposal_mask": item.get("proposal_mask"),
+            "proposal_area": item.get("proposal_area"),
+            "proposal_box": item.get("proposal_box"),
         })
     stats["crop_windows"] = len(crop_items)
 
@@ -1382,14 +1770,15 @@ def maskcut_multicrop(
         backbone,
         patch_size,
         tau,
-        N=N,
+        N=crop_N,
         fixed_size=fixed_size,
         cpu=cpu,
         batch_size=crop_batch_size,
     )
+    per_crop_candidates = []
+    retry_items = []
     for item, (bipartitions, _, crop_resized) in zip(crop_items, crop_results):
-        stats["crop_candidates"] += add_refined_masks_to_candidates(
-            crop_candidates,
+        candidates = refined_mask_candidates_from_bipartitions(
             bipartitions,
             crop_resized,
             item["box"],
@@ -1399,7 +1788,77 @@ def maskcut_multicrop(
             crop_score=item.get("crop_score", 0.0),
             crop_reason=item.get("crop_reason"),
             protected_masks=protected_masks,
+            proposal_mask=item.get("proposal_mask"),
+            retry_scale=1.0,
         )
+        stats["generated_crop_candidates"] += len(candidates)
+        per_crop_candidates.append({"item": item, "candidates": candidates})
+
+        if border_retry and (
+            not candidates or
+            needs_border_retry(
+                candidates,
+                border_touch_thresh=border_retry_touch_thresh,
+                border_sides_thresh=border_retry_sides_thresh,
+            )
+        ):
+            for retry_scale in border_retry_scales:
+                retry_box = expand_crop_box(item["box"], retry_scale, orig_w, orig_h)
+                if retry_box == item["box"]:
+                    continue
+                retry_item = dict(item)
+                retry_item["crop"] = I.crop(retry_box)
+                retry_item["box"] = retry_box
+                retry_item["retry_scale"] = float(retry_scale)
+                retry_item["parent_idx"] = len(per_crop_candidates) - 1
+                retry_items.append(retry_item)
+
+    if retry_items:
+        stats["border_retry_windows"] = len(retry_items)
+        retry_results = maskcut_from_pil_batch(
+            [item["crop"] for item in retry_items],
+            backbone,
+            patch_size,
+            tau,
+            N=crop_N,
+            fixed_size=fixed_size,
+            cpu=cpu,
+            batch_size=crop_batch_size,
+        )
+        for item, (bipartitions, _, crop_resized) in zip(retry_items, retry_results):
+            retry_candidates = refined_mask_candidates_from_bipartitions(
+                bipartitions,
+                crop_resized,
+                item["box"],
+                output_shape,
+                crf_iou_thresh=crf_iou_thresh,
+                source="raw_multiscale",
+                crop_score=item.get("crop_score", 0.0),
+                crop_reason=item.get("crop_reason"),
+                protected_masks=protected_masks,
+                proposal_mask=item.get("proposal_mask"),
+                retry_scale=item.get("retry_scale", 1.0),
+            )
+            stats["generated_crop_candidates"] += len(retry_candidates)
+            per_crop_candidates[item["parent_idx"]]["candidates"].extend(retry_candidates)
+
+    for record in per_crop_candidates:
+        kept_for_crop = []
+        for candidate in record["candidates"]:
+            if crop_shape_reject and is_crop_shaped_candidate(
+                candidate,
+                crop_fill_thresh=crop_fill_thresh,
+                border_touch_thresh=border_retry_touch_thresh,
+                border_sides_thresh=border_retry_sides_thresh,
+            ):
+                stats["crop_shape_rejected"] += 1
+                continue
+            kept_for_crop.append(candidate)
+        kept_for_crop.sort(key=lambda candidate: candidate.mask_score, reverse=True)
+        if crop_keep_per_window > 0:
+            kept_for_crop = kept_for_crop[:crop_keep_per_window]
+        crop_candidates.extend(kept_for_crop)
+        stats["crop_candidates"] += len(kept_for_crop)
 
     stats["scored_candidates"] = len(crop_candidates)
     crop_merged_candidates = merge_mask_candidates(
@@ -1458,6 +1917,86 @@ def resize_binary_mask(array, new_size):
     image = Image.fromarray(array.astype(np.uint8)*255)
     image = image.resize(new_size, PIL.Image.NEAREST)
     return np.asarray(image).astype(np.bool_)
+
+
+def expand_crop_box(box, scale, orig_w, orig_h):
+    left, top, right, bottom = box
+    cx = (left + right) / 2.0
+    cy = (top + bottom) / 2.0
+    size = max(right - left, bottom - top) * float(scale)
+    return clip_square_box(cx, cy, size, orig_w, orig_h)
+
+
+def is_crop_shaped_candidate(
+    candidate,
+    crop_fill_thresh=0.9,
+    border_touch_thresh=0.5,
+    border_sides_thresh=2,
+):
+    if candidate.crop_box is None:
+        return False
+    meta = candidate.meta
+    internal_touch = meta.get("internal_border_touch", meta.get("border_touch", 0.0))
+    internal_sides = meta.get("internal_border_sides", meta.get("border_sides", 0))
+    crop_fill = meta.get("crop_fill", 0.0)
+    return (
+        crop_fill >= crop_fill_thresh and
+        (internal_touch >= border_touch_thresh or internal_sides >= border_sides_thresh)
+    )
+
+
+def needs_border_retry(
+    candidates,
+    border_touch_thresh=0.5,
+    border_sides_thresh=2,
+):
+    if not candidates:
+        return False
+    best = max(candidates, key=lambda c: c.mask_score)
+    internal_touch = best.meta.get("internal_border_touch", best.meta.get("border_touch", 0.0))
+    internal_sides = best.meta.get("internal_border_sides", best.meta.get("border_sides", 0))
+    return internal_touch >= border_touch_thresh or internal_sides >= border_sides_thresh
+
+
+def refined_mask_candidates_from_bipartitions(
+    bipartitions,
+    crop_resized,
+    target_box,
+    output_shape,
+    crf_iou_thresh=0.3,
+    source="crop",
+    crop_score=0.0,
+    crop_reason=None,
+    protected_masks=None,
+    proposal_mask=None,
+    retry_scale=1.0,
+):
+    left, top, right, bottom = target_box
+    orig_h, orig_w = output_shape
+    candidates = []
+
+    for bipartition in bipartitions:
+        refined, crf_iou = postprocess_crop_mask(crop_resized, bipartition, crf_iou_thresh)
+        if refined is None:
+            continue
+        refined = resize_binary_mask(refined, (right - left, bottom - top))
+        full_mask = np.zeros((orig_h, orig_w), dtype=np.bool_)
+        full_mask[top:bottom, left:right] = np.logical_or(
+            full_mask[top:bottom, left:right], refined
+        )
+        candidates.append(make_mask_candidate(
+            full_mask,
+            source=source,
+            crop_box=target_box,
+            crop_score=crop_score,
+            crop_reason=crop_reason,
+            protected_masks=protected_masks,
+            crf_iou=crf_iou,
+            proposal_mask=proposal_mask,
+            retry_scale=retry_scale,
+        ))
+    return candidates
+
 
 def create_image_info(image_id, file_name, image_size, 
                       date_captured=datetime.datetime.utcnow().isoformat(' '),
@@ -1629,8 +2168,8 @@ if __name__ == "__main__":
     parser.add_argument('--N', type=int, default=3, help='the maximum number of pseudo-masks per image')
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--multi-crop', action='store_true', help='run MaskCut on multiple crop scales and merge masks')
-    parser.add_argument('--ms-preset', type=str, default='small', choices=['small', 'balanced', 'legacy'], help='bundle of multi-crop defaults; individual flags still override the preset')
-    parser.add_argument('--crop-mode', type=str, default='heatmap', choices=['grid', 'heatmap'], help='crop proposal mode: dense grid or DINO feature-contrast heatmap')
+    parser.add_argument('--ms-preset', type=str, default='small', choices=['small', 'balanced', 'mostlite', 'legacy'], help='bundle of multi-crop defaults; individual flags still override the preset')
+    parser.add_argument('--crop-mode', type=str, default='heatmap', choices=['grid', 'heatmap', 'mostlite'], help='crop proposal mode: dense grid, DINO feature-contrast heatmap, or MOST-lite token clusters')
     parser.add_argument('--crop-scales', type=str, default='1.0,0.75,0.5', help='comma separated crop scales for multi-crop mode')
     parser.add_argument('--crop-overlap', type=float, default=0.3, help='overlap ratio between adjacent windows in multi-crop mode')
     parser.add_argument('--crop-max-per-scale', type=int, default=0, help='limit number of windows per scale (0 keeps all)')
@@ -1642,6 +2181,8 @@ if __name__ == "__main__":
     parser.add_argument('--two-stage-crop', action='store_true', help='run full-image MaskCut first and skip crop windows already covered by that foreground')
     parser.add_argument('--two-stage-max-covered-ratio', type=float, default=0.9, help='skip crop windows whose area is covered by full-stage masks at or above this ratio')
     parser.add_argument('--crop-batch-size', type=int, default=8, help='number of crop images per DINO forward pass in multi-crop mode')
+    parser.add_argument('--crop-N', '--crop-n', dest='crop_N', type=int, default=0, help='MaskCut iterations inside each crop (0 uses --N); useful for keeping full-image N high while crop proposals stay precise')
+    parser.add_argument('--crop-keep-per-window', type=int, default=0, help='after scoring retries/masks from one crop proposal, keep only this many candidates (0 keeps all)')
     parser.add_argument('--containment-thresh', type=float, default=0.85, help='intersection-over-smaller threshold: connect masks where one covers at least this fraction of the other')
     parser.add_argument('--box-expand-ratio', type=float, default=0.05, help='expand bounding boxes by this fraction when testing adjacency between mask fragments')
     parser.add_argument('--merge-max-aspect-ratio', type=float, default=3.0, help='reject a merged mask if its bounding box aspect ratio exceeds this (catches bad cross-object unions)')
@@ -1651,6 +2192,14 @@ if __name__ == "__main__":
     parser.add_argument('--heatmap-nms-iou', type=float, default=0.4, help='crop-box NMS IoU for heatmap crop proposals')
     parser.add_argument('--heatmap-percentile', type=float, default=85.0, help='minimum feature-contrast percentile considered for heatmap crop peaks')
     parser.add_argument('--heatmap-spatial-rescue', type=int, default=-1, help='number of heatmap crop slots reserved for under-covered spatial cells (-1 uses preset/auto)')
+    parser.add_argument('--mostlite-percentile', type=float, default=78.0, help='foreground-token objectness percentile for MOST-lite crop proposals')
+    parser.add_argument('--mostlite-sim-percentile', type=float, default=92.0, help='feature-similarity percentile used to grow MOST-lite token clusters')
+    parser.add_argument('--border-retry', action='store_true', help='rerun crop MaskCut on larger crops when the best crop mask touches internal crop borders')
+    parser.add_argument('--border-retry-scales', type=str, default='1.4,1.8', help='comma separated scale multipliers for border-aware crop retries')
+    parser.add_argument('--border-retry-touch-thresh', type=float, default=0.5, help='internal border-touch threshold that triggers crop retry and crop-shaped rejection')
+    parser.add_argument('--border-retry-sides-thresh', type=int, default=2, help='number of internal crop sides touched that triggers retry/rejection')
+    parser.add_argument('--crop-shape-reject', action='store_true', help='reject masks whose bbox fills the crop while touching internal crop borders')
+    parser.add_argument('--crop-fill-thresh', type=float, default=0.9, help='bbox/crop fill threshold used by crop-shaped mask rejection')
     parser.add_argument('--crf-iou-thresh', type=float, default=0.3, help='minimum IoU between raw MaskCut mask and CRF-refined mask for accepting crop proposals')
     parser.add_argument('--primary-output', type=str, default='multiscale', choices=['normal', 'raw_multiscale', 'multiscale', 'combined'], help='which split is written to the unsuffixed JSON/checkpoint in multi-crop mode')
     parser.add_argument('--write-split-outputs', action='store_true', help='legacy flag; split outputs are always written in multi-crop mode')
@@ -1660,6 +2209,7 @@ if __name__ == "__main__":
     apply_multiscale_preset(args)
     crop_scales = parse_float_list(args.crop_scales)
     heatmap_crop_sizes = parse_size_list(args.heatmap_crop_sizes)
+    border_retry_scales = parse_float_list(args.border_retry_scales)
 
     if args.pretrain_path is not None:
         url = args.pretrain_path
@@ -1699,10 +2249,13 @@ if __name__ == "__main__":
         "ranked_windows": 0,
         "rescue_windows": 0,
         "crop_windows": 0,
+        "generated_crop_candidates": 0,
         "crop_candidates": 0,
         "crop_merged_masks": 0,
         "merged_masks": 0,
         "scored_candidates": 0,
+        "border_retry_windows": 0,
+        "crop_shape_rejected": 0,
     }
     split_outputs = {
         "normal": new_coco_output(),
@@ -1744,6 +2297,8 @@ if __name__ == "__main__":
                         two_stage_crop=args.two_stage_crop,
                         two_stage_max_covered_ratio=args.two_stage_max_covered_ratio,
                         crop_batch_size=args.crop_batch_size,
+                        crop_N=args.crop_N,
+                        crop_keep_per_window=args.crop_keep_per_window,
                         containment_thresh=args.containment_thresh,
                         box_expand_ratio=args.box_expand_ratio,
                         merge_max_aspect_ratio=args.merge_max_aspect_ratio,
@@ -1754,6 +2309,14 @@ if __name__ == "__main__":
                         heatmap_nms_iou=args.heatmap_nms_iou,
                         heatmap_percentile=args.heatmap_percentile,
                         heatmap_spatial_rescue=args.heatmap_spatial_rescue,
+                        mostlite_percentile=args.mostlite_percentile,
+                        mostlite_sim_percentile=args.mostlite_sim_percentile,
+                        border_retry=args.border_retry,
+                        border_retry_scales=border_retry_scales,
+                        border_retry_touch_thresh=args.border_retry_touch_thresh,
+                        border_retry_sides_thresh=args.border_retry_sides_thresh,
+                        crop_shape_reject=args.crop_shape_reject,
+                        crop_fill_thresh=args.crop_fill_thresh,
                         crf_iou_thresh=args.crf_iou_thresh,
                         return_stats=True,
                         return_splits=True,
@@ -1773,13 +2336,16 @@ if __name__ == "__main__":
                 if args.log_every > 0 and processed_images % args.log_every == 0:
                     print(
                         "Multi-crop stats after {} images: full_masks={}, "
-                        "windows={} skipped={} ranked={} rescue={} crop_candidates={} scored={} crop_merged={} merged={}".format(
+                        "windows={} skipped={} ranked={} rescue={} retries={} generated={} rejected={} crop_candidates={} scored={} crop_merged={} merged={}".format(
                             processed_images,
                             multicrop_totals["full_masks"],
                             multicrop_totals["total_windows"],
                             multicrop_totals["skipped_covered"],
                             multicrop_totals["ranked_windows"],
                             multicrop_totals["rescue_windows"],
+                            multicrop_totals["border_retry_windows"],
+                            multicrop_totals["generated_crop_candidates"],
+                            multicrop_totals["crop_shape_rejected"],
                             multicrop_totals["crop_candidates"],
                             multicrop_totals["scored_candidates"],
                             multicrop_totals["crop_merged_masks"],
@@ -1850,7 +2416,25 @@ if __name__ == "__main__":
     # save annotations
     crop_tag = ''
     if args.multi_crop:
-        if args.crop_mode == 'heatmap':
+        if args.crop_mode == 'mostlite':
+            crop_tag = '_mostlite_hs{}_hk{}_mp{}_ms{}_miou{}'.format(
+                args.heatmap_crop_sizes.replace(',', '-'),
+                args.heatmap_top_k,
+                args.mostlite_percentile,
+                args.mostlite_sim_percentile,
+                args.merge_iou_thresh,
+            )
+            if args.crop_N > 0 and args.crop_N != args.N:
+                crop_tag += '_cN{}'.format(args.crop_N)
+            if args.crop_keep_per_window > 0:
+                crop_tag += '_kpw{}'.format(args.crop_keep_per_window)
+            if args.border_retry:
+                crop_tag += '_br{}'.format(args.border_retry_scales.replace(',', '-'))
+            if args.crop_shape_reject:
+                crop_tag += '_csr{}'.format(args.crop_fill_thresh)
+            if args.crf_iou_thresh != 0.3:
+                crop_tag += '_crf{}'.format(args.crf_iou_thresh)
+        elif args.crop_mode == 'heatmap':
             crop_tag = '_heatmap_hs{}_hp{}_hk{}_sr{}_miou{}'.format(
                 args.heatmap_crop_sizes.replace(',', '-'),
                 args.heatmap_percentile,
@@ -1864,6 +2448,8 @@ if __name__ == "__main__":
                 args.crop_overlap,
                 args.merge_iou_thresh,
             )
+        if args.crop_mode != 'mostlite' and args.crop_N > 0 and args.crop_N != args.N:
+            crop_tag += '_cN{}'.format(args.crop_N)
         crop_tag += '_preset{}'.format(args.ms_preset)
         crop_tag += '_ts{}'.format(args.two_stage_max_covered_ratio)
     if len(img_folders) == args.num_folder_per_job and args.job_index == 0:
@@ -1897,13 +2483,16 @@ if __name__ == "__main__":
     if args.multi_crop and processed_images > 0:
         print(
             "Final multi-crop stats: images={} full_masks={} windows={} "
-            "skipped={} ranked={} rescue={} crop_candidates={} scored={} crop_merged={} merged={}".format(
+            "skipped={} ranked={} rescue={} retries={} generated={} rejected={} crop_candidates={} scored={} crop_merged={} merged={}".format(
                 processed_images,
                 multicrop_totals["full_masks"],
                 multicrop_totals["total_windows"],
                 multicrop_totals["skipped_covered"],
                 multicrop_totals["ranked_windows"],
                 multicrop_totals["rescue_windows"],
+                multicrop_totals["border_retry_windows"],
+                multicrop_totals["generated_crop_candidates"],
+                multicrop_totals["crop_shape_rejected"],
                 multicrop_totals["crop_candidates"],
                 multicrop_totals["scored_candidates"],
                 multicrop_totals["crop_merged_masks"],

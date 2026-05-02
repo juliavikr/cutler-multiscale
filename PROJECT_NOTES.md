@@ -124,6 +124,9 @@ To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
 - [x] Add DINO feature-contrast heatmap crop proposal mode as an alternative to grid crops
 - [x] Replace area-first crop selection with scored mask candidates and preset-based defaults
 - [x] Emit candidate debug JSON with crop boxes, crop scores, mask scores, area, compactness, border touch, and overlap metadata
+- [x] Snapshot hybrid crop-proposal baseline as `multiscale/multiscale_maskcut_hybrid.py`
+- [x] Add experimental `--ms-preset mostlite` / `--crop-mode mostlite` using DINO token clusters as crop proposals
+- [x] Make MOST-lite crop MaskCut cleaner with separate `--crop-n`, border-aware retries, crop-shaped rejection, and token-cluster alignment scoring
 - [x] Implement image pyramid construction (crop scales 1.0, 0.5)
 - [x] Run MaskCut at each scale
 - [x] Implement multi-scale proposal merging (IoU-based NMS)
@@ -169,6 +172,9 @@ To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
 - Heatmap crop mode uses one full-image DINO feature-contrast pass to rank crop proposals before running crop MaskCut.
 - Current default is `--ms-preset small`: heatmap crops, small-mask area cap, score-first merge/top-K, and `multiscale` as the primary output.
 - The candidate scorer ranks crop masks by small-object area prior, compactness, crop score, CRF agreement, border touch, aspect ratio, and duplicate overlap with normal masks.
+- MOST-lite mode uses one full-image DINO pass to seed foreground-like tokens, grows compact feature-similar token clusters, converts clusters into crop boxes, then runs crop MaskCut only on those boxes.
+- MOST-lite preset now keeps full-image `--N` separate from crop iterations: full-image MaskCut can stay at `--N 3`, while crop proposals default to `--crop-n 1`.
+- MOST-lite now retries internally border-touching crop masks on larger crops, rejects crop-shaped masks, scores masks against the DINO token cluster that proposed the crop, and uses the original-style stricter CRF agreement threshold (`--crf-iou-thresh 0.5`).
 - Advanced thresholds remain available as overrides, but normal experiments should start from `--ms-preset small` or `--ms-preset balanced` instead of tuning every knob.
 
 ---
