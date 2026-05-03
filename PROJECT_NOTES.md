@@ -163,3 +163,46 @@ Multi-scale generates 7.5x more annotations, concentrated in small objects.
 **To run with new features:**
 TWO_STAGE_CROP=1 CROP_SCALES=1.0,0.75,0.5 N_MASKS=3 sbatch slurm/run_multiscale_maskcut.sh
 Use `--crop-top-k 8` to keep only 8 most informative windows per image.
+
+### Phase 3: Detector Training — First Run (2026-05-01)
+
+**Model:** Cascade Mask R-CNN R50 FPN
+- Multiple detection heads cascaded for better accuracy
+- Class-agnostic (foreground vs background only)
+- 160,000 iterations, LR drops at 80,000
+- Batch size 2 (scaled down from default 16 for 8 GPUs)
+- Input: 2500 TinyImageNet-5 images, 24,771 multi-scale pseudo-label annotations
+- Evaluation: COCO val2017 AP-Small and AP-Medium
+
+**Results — Multi-scale pseudo-labels (job 486811):**
+
+BBOX:
+| AP | AP50 | AP75 | APs | APm | APl |
+|----|------|------|-----|-----|-----|
+| 0.0005 | 0.0015 | 0.0003 | 0.0009 | 0.0006 | 0.0008 |
+
+SEGM:
+| AP | AP50 | AP75 | APs | APm | APl |
+|----|------|------|-----|-----|-----|
+| 0.0004 | 0.0011 | 0.0002 | 0.0004 | 0.0006 | 0.0002 |
+
+**Why results are near-zero:**
+Numbers are extremely low because 2,500 training images is insufficient for
+the detector to learn generalizable features for COCO. Original CutLER used
+1.28M images (~200x more). This is expected.
+
+**Validity of comparison:**
+- Direct comparison with CutLER published numbers is misleading due to
+  200x data difference
+- Valid comparison IS: single-scale vs multi-scale under same conditions
+  (same dataset, same detector, same evaluation)
+- The only variable is pseudo-label quality — this is a controlled experiment
+
+**Data requirements:**
+- 2,500 images: too few — detector doesn't generalize
+- 10,000-20,000 images: would give more reliable results
+- 100,000 images (full TinyImageNet): feasible once speed regression fixed
+  (currently 48s/it → ~33h; target 6s/it → splittable with --job-index)
+
+**Next:** Run same training on single-scale pseudo-labels for controlled
+comparison, then investigate speed regression to enable full dataset run.

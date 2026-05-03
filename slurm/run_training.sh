@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=cutler-train
-#SBATCH --account=3355142
+#SBATCH --account=3152697
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -10,19 +10,20 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=48G
 #SBATCH --time=24:00:00
-#SBATCH --output=logs/training_%j.out
-#SBATCH --error=logs/training_%j.err
+#SBATCH --output=/home/3152697/cutler-multiscale/logs/training_%j.out
+#SBATCH --error=/home/3152697/cutler-multiscale/logs/training_%j.err
 
 set -euo pipefail
 
 module load miniconda3
+source /software/miniconda3/etc/profile.d/conda.sh
 conda activate cutler
 
 # --- Paths (edit before submitting) ---
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="/home/3152697/cutler-multiscale"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"
 PSEUDO_LABELS="${REPO_ROOT}/pseudo_masks/tiny_imagenet"     # JSON from run_maskcut.sh
-IMAGE_DIR="${DATA_ROOT}/tiny-imagenet-200/train"
+IMAGE_DIR="${DATA_ROOT}/tiny-imagenet-5/train"
 OUTPUT_DIR="${REPO_ROOT}/output/cutler_r50_1gpu"
 CONFIG="${REPO_ROOT}/CutLER/cutler/model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml"
 
