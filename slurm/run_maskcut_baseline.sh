@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=maskcut-baseline
-#SBATCH --account=3355142
+#SBATCH --account=3152697
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -10,8 +10,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --output=logs/maskcut_baseline_%j.out
-#SBATCH --error=logs/maskcut_baseline_%j.err
+#SBATCH --output=/home/3152697/cutler-multiscale/logs/maskcut_baseline_%j.out
+#SBATCH --error=/home/3152697/cutler-multiscale/logs/maskcut_baseline_%j.err
 
 # =============================================================================
 # Purpose: Baseline (single-scale) MaskCut on 10-class TinyImageNet subset.
@@ -33,6 +33,7 @@ set -euo pipefail
 
 # Environment
 module load miniconda3
+source /software/miniconda3/etc/profile.d/conda.sh
 eval "$(conda shell.bash hook)"
 conda activate cutler
 
