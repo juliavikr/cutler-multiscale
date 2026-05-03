@@ -1,4 +1,15 @@
 #!/bin/bash
+# Train CutLER Cascade Mask R-CNN on TinyImageNet pseudo-labels.
+#
+# Usage:
+#   PSEUDO_LABEL_NAME=baseline    sbatch slurm/run_training.sh
+#   PSEUDO_LABEL_NAME=multiscale  sbatch slurm/run_training.sh
+#
+# PSEUDO_LABEL_NAME selects the annotation JSON and names the output directory.
+# Tip: pass --job-name to sbatch for descriptive log filenames, e.g.:
+#   PSEUDO_LABEL_NAME=baseline sbatch --job-name=training_baseline slurm/run_training.sh
+#   → logs/training_training_baseline_<jobid>.out
+# (SLURM does not expand shell variables in #SBATCH directives; %x = job name, %j = job ID.)
 
 #SBATCH --job-name=cutler-train
 #SBATCH --account=3152697
@@ -6,49 +17,59 @@
 #SBATCH --qos=stud
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=48G
-#SBATCH --time=24:00:00
-#SBATCH --output=/home/3152697/cutler-multiscale/logs/training_%j.out
-#SBATCH --error=/home/3152697/cutler-multiscale/logs/training_%j.err
+#SBATCH --time=20:00:00
+#SBATCH --output=/home/3152697/cutler-multiscale/logs/training_%x_%j.out
+#SBATCH --error=/home/3152697/cutler-multiscale/logs/training_%x_%j.err
 
 set -euo pipefail
 
-module load miniconda3
+# --- Validate required env var ---
+if [[ -z "${PSEUDO_LABEL_NAME:-}" ]]; then
+    echo "ERROR: PSEUDO_LABEL_NAME is not set."
+    echo "Usage: PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh"
+    exit 1
+fi
+
+# --- Environment ---
 source /software/miniconda3/etc/profile.d/conda.sh
+eval "$(conda shell.bash hook)"
 conda activate cutler
 
-# --- Paths (edit before submitting) ---
-REPO_ROOT="/home/3152697/cutler-multiscale"
-DATA_ROOT="${DATA_ROOT:-${HOME}/data}"
-PSEUDO_LABELS="${REPO_ROOT}/pseudo_masks/tiny_imagenet"     # JSON from run_maskcut.sh
-IMAGE_DIR="${DATA_ROOT}/tiny-imagenet-5/train"
-OUTPUT_DIR="${REPO_ROOT}/output/cutler_r50_1gpu"
-CONFIG="${REPO_ROOT}/CutLER/cutler/model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml"
+# --- Paths ---
+export DETECTRON2_DATASETS="${HOME}/data"
+ANNO_DIR="${HOME}/data/tiny-imagenet-10classes/annotations"
 
+case "${PSEUDO_LABEL_NAME}" in
+    baseline)
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_baseline_pseudo.json"
+        ;;
+    multiscale)
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_multiscale_pseudo.json"
+        ;;
+    *)
+        echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline' or 'multiscale'."
+        exit 1
+        ;;
+esac
+
+OUTPUT_DIR="${HOME}/cutler-multiscale/experiments/training_${PSEUDO_LABEL_NAME}"
 mkdir -p "${OUTPUT_DIR}"
 
-# Single-GPU adjustments vs the default 8-GPU config:
-#   IMS_PER_BATCH: 16 -> 2  (2 images fit per GPU with Cascade Mask R-CNN R50)
-#   BASE_LR:     0.01 -> 0.00125  (linear scaling: 0.01 * 2/16)
-#   STEPS and MAX_ITER unchanged (iteration-based schedule, not epoch-based)
+echo "=== CutLER training ==="
+echo "  PSEUDO_LABEL_NAME : ${PSEUDO_LABEL_NAME}"
+echo "  PSEUDO_JSON       : ${PSEUDO_JSON}"
+echo "  OUTPUT_DIR        : ${OUTPUT_DIR}"
+echo "  SLURM_JOB_ID      : ${SLURM_JOB_ID:-local}"
 
-cd "${REPO_ROOT}/CutLER/cutler"
+cd "${HOME}/cutler-multiscale/CutLER/cutler"
 
-python train_net.py \
+# train_wrapper.py pre-registers our TinyImageNet datasets then runs train_net.py
+python "${HOME}/cutler-multiscale/tools/train_wrapper.py" \
     --num-gpus 1 \
-    --config-file "${CONFIG}" \
-    DATASETS.TRAIN '("imagenet_train",)' \
-    DATASETS.TEST '("coco_2017_val",)' \
-    DATALOADER.NUM_WORKERS 4 \
-    SOLVER.IMS_PER_BATCH 2 \
-    SOLVER.BASE_LR 0.00125 \
-    SOLVER.MAX_ITER 160000 \
-    SOLVER.STEPS '(80000,)' \
-    MODEL.RESNETS.NORM '"BN"' \
-    MODEL.FPN.NORM '"BN"' \
-    OUTPUT_DIR "${OUTPUT_DIR}" \
-    2>&1 | tee "${OUTPUT_DIR}/train.log"
+    --config-file model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml \
+    DATASETS.TRAIN "(\"tinyimagenet_${PSEUDO_LABEL_NAME}_pseudo\",)" \
+    SOLVER.
 
-echo "Training done. Checkpoints in ${OUTPUT_DIR}."

@@ -6,6 +6,77 @@
 
 ---
 
+## Locked Experiment Parameters
+
+Both the baseline (single-scale) and multi-scale MaskCut runs on TinyImageNet must use these identical parameters so the resulting pseudo-labels are directly comparable. Any change here invalidates the comparison and requires re-running both.
+
+### Shared parameters (baseline + multiscale)
+
+| Parameter | Value | Purpose |
+| --- | --- | --- |
+| --vit-arch | small | DINO ViT-Small backbone |
+| --vit-feat | k | use key features from attention |
+| --patch-size | 8 | 8×8 pixel patches |
+| --tau | 0.15 | affinity graph threshold |
+| --N | 3 | max masks discovered per image |
+| --fixed_size | 480 | resize input to 480×480 square |
+| --pretrain_path | ~/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth | DINO weights |
+
+### Multi-scale-only parameters (added on top for multiscale run)
+
+| Parameter | Value | Purpose |
+| --- | --- | --- |
+| --multi-crop | flag | enable multi-scale mode |
+| --crop-scales | 1.0,0.75,0.5 | three zoom levels |
+| --crop-overlap | 0.3 | sliding window overlap |
+| --merge-iou-thresh | 0.5 | NMS IoU threshold for deduplication |
+| --small-first | flag | prefer keeping small masks during NMS (helps APs) |
+
+### Dataset
+
+- Path: ~/data/tiny-imagenet-10classes/train/
+- Size: 10 classes × 50 images = 500 images total
+- Classes used (TinyImageNet WordNet IDs):
+  - n01443537 (goldfish)
+  - n02123045 (tabby cat)
+  - n02281406 (sulphur butterfly)
+  - n02410509 (bison)
+  - n02906734 (broom)
+  - n03100240 (convertible)
+  - n03444034 (go-kart)
+  - n04067472 (reel)
+  - n04254777 (sock)
+  - n07711569 (mashed potato)
+- These were chosen for visual diversity across animals, vehicles, and household objects. Verified contents on cluster: 10 folders × 50 images = 500 total images at ~/data/tiny-imagenet-10classes/train/.
+
+### Why 10 classes
+
+Baseline MaskCut on the A100 takes ~6-7 sec/image. Multi-scale runs the algorithm on the full image plus crops at 0.75× and 0.5× scales, processing roughly 10× as many MaskCut calls per image.
+
+Estimated runtimes:
+- Baseline on 500 images: ~1 hour
+- Multi-scale on 500 images: ~10 hours (fits within cluster's 24h time limit)
+- Multi-scale on 2500 images (50 classes): ~50 hours (would not fit)
+
+10 classes × 50 images is the largest TinyImageNet subset where both baseline and multi-scale can be run on the cluster, with margin for re-runs and parameter ablations. Detector training on 500 pseudo-labeled images is small but sufficient for a reproducible comparison.
+
+### Output JSONs (target locations)
+
+- Baseline: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json
+- Multi-scale: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json
+
+### Generated artifacts
+
+| Artifact | Status | Location (cluster) | Size | Images | Annotations | Generated |
+|----------|--------|--------------------|------|--------|-------------|-----------|
+| Baseline pseudo-labels | **exists** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json` | 321 KB | 500 | 748 | 2026-05-01 |
+| Multiscale pseudo-labels | **pending** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json` | — | — | — | pending Luiz's finalization |
+
+These JSONs are not committed to Git (regeneratable, and excluded by `.gitignore`).
+To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
+
+---
+
 ## Compute Environment
 
 **Cluster:** Bocconi University HPC (`slogin.hpc.unibocconi.it`)
@@ -48,6 +119,14 @@
 - [x] Added crop batching and optional two-stage crop skipping to reduce repeated DINO forwards
 - [x] Run single-image local debugging with JSON overlay visualization
 - [x] Confirmed corrected implementation surfaces table / foreground objects that the old implementation missed
+- [x] Keep split outputs for normal, raw multiscale, merged multiscale, and combined masks
+- [x] Default primary multi-crop JSON to multiscale-only so combined masks are not used for training by accident
+- [x] Add DINO feature-contrast heatmap crop proposal mode as an alternative to grid crops
+- [x] Replace area-first crop selection with scored mask candidates and preset-based defaults
+- [x] Emit candidate debug JSON with crop boxes, crop scores, mask scores, area, compactness, border touch, and overlap metadata
+- [x] Snapshot hybrid crop-proposal baseline as `multiscale/multiscale_maskcut_hybrid.py`
+- [x] Add experimental `--ms-preset mostlite` / `--crop-mode mostlite` using DINO token clusters as crop proposals
+- [x] Make MOST-lite crop MaskCut cleaner with separate `--crop-n`, border-aware retries, crop-shaped rejection, and token-cluster alignment scoring
 - [x] Implement image pyramid construction (crop scales 1.0, 0.5)
 - [x] Run MaskCut at each scale
 - [x] Implement multi-scale proposal merging (IoU-based NMS)
@@ -88,6 +167,15 @@
 - After the fix, the same image produced a richer set of masks including several foreground/table objects, indicating the implementation is now directionally aligned with the project goal.
 - Current merge logic is still heuristic and can produce partial or fragmented masks; further tuning or a stronger merge method is still needed.
 - Open merge questions: IoU suppression vs Soft-NMS / weighted fusion, crop-scale thresholds, and combining original CutLER proposals with multi-scale proposals.
+- Newer runs write four multi-crop views: `normal`, `raw_multiscale`, `multiscale`, and `combined`.
+- Use `multiscale` as the training/evaluation candidate for now; `combined` is diagnostic until overlap hierarchy is handled better.
+- Heatmap crop mode uses one full-image DINO feature-contrast pass to rank crop proposals before running crop MaskCut.
+- Current default is `--ms-preset small`: heatmap crops, small-mask area cap, score-first merge/top-K, and `multiscale` as the primary output.
+- The candidate scorer ranks crop masks by small-object area prior, compactness, crop score, CRF agreement, border touch, aspect ratio, and duplicate overlap with normal masks.
+- MOST-lite mode uses one full-image DINO pass to seed foreground-like tokens, grows compact feature-similar token clusters, converts clusters into crop boxes, then runs crop MaskCut only on those boxes.
+- MOST-lite preset now keeps full-image `--N` separate from crop iterations: full-image MaskCut can stay at `--N 3`, while crop proposals default to `--crop-n 1`.
+- MOST-lite now retries internally border-touching crop masks on larger crops, rejects crop-shaped masks, scores masks against the DINO token cluster that proposed the crop, and uses the original-style stricter CRF agreement threshold (`--crf-iou-thresh 0.5`).
+- Advanced thresholds remain available as overrides, but normal experiments should start from `--ms-preset small` or `--ms-preset balanced` instead of tuning every knob.
 
 ---
 

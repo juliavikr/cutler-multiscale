@@ -237,7 +237,18 @@ annotations_cache/
 # Pseudo-label outputs
 pseudo_masks/
 pseudo_labels/
+*_pseudo.json
 *.json.gz
+
+# Training and eval outputs (model checkpoints, inference results)
+experiments/training_*/
+experiments/eval_*/
+experiments/visualizations/
+
+# Auto-generated visualization dumps (regenerate with slurm/run_visualize.sh)
+# presentation/02_visualizations/selected/ is intentionally NOT ignored — for hand-picked images
+presentation/02_visualizations/baseline_masks/
+presentation/02_visualizations/multiscale_masks/
 
 # Wandb / experiment tracking
 wandb/
