@@ -41,7 +41,7 @@ python multiscale/multiscale_maskcut.py \
     --N "${N}" \
     --num-folder-per-job 10 \
     --job-index 0 \
-    --dataset-path "${HOME}/data/tiny-imagenet-10classes/train/" \
+    --dataset-path "${HOME}/data/tiny-imagenet-10classes/train_flat/" \
     --pretrain_path "/mnt/beegfsstudents/home/3152697/weights/dino_deitsmall8_pretrain.pth" \
     --out-dir "${ANNO_DIR}" \
     --multi-crop \

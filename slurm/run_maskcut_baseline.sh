@@ -52,7 +52,7 @@ python maskcut.py \
     --N 3 \
     --fixed_size 480 \
     --pretrain_path "/mnt/beegfsstudents/home/3152697/weights/dino_deitsmall8_pretrain.pth" \
-    --dataset-path "${HOME}/data/tiny-imagenet-10classes/train/" \
+    --dataset-path "${HOME}/data/tiny-imagenet-10classes/train_flat/" \
     --num-folder-per-job 10 \
     --job-index 0 \
     --out-dir "${ANNO_DIR}"
