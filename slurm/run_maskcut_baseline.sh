@@ -1,7 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=maskcut-baseline
-#SBATCH --account=3152697
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -10,13 +11,13 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --output=/home/3152697/cutler-multiscale/logs/maskcut_baseline_%j.out
-#SBATCH --error=/home/3152697/cutler-multiscale/logs/maskcut_baseline_%j.err
+#SBATCH --output=logs/maskcut_baseline_%j.out
+#SBATCH --error=logs/maskcut_baseline_%j.err
 
 # =============================================================================
 # Purpose: Baseline (single-scale) MaskCut on 10-class TinyImageNet subset.
 #
-# Locked parameters — MUST match slurm/run_multiscale_maskcut_tinyimagenet.sh
+# Locked parameters — MUST match slurm/run_multiscale_maskcut.sh
 # for the comparison to be valid. See PROJECT_NOTES.md "Locked Experiment
 # Parameters" before changing anything below.
 #
@@ -26,7 +27,7 @@
 #   --tau       0.15      affinity graph threshold
 #   --N         3         max masks per image
 #   --fixed_size 480      resize input to 480×480 square
-#   --pretrain_path       dino_deitsmall8_300ep_pretrain.pth
+#   --pretrain_path       dino_deitsmall8_pretrain.pth
 # =============================================================================
 
 set -euo pipefail
@@ -51,7 +52,7 @@ python maskcut.py \
     --tau 0.15 \
     --N 3 \
     --fixed_size 480 \
-    --pretrain_path "/mnt/beegfsstudents/home/3152697/weights/dino_deitsmall8_pretrain.pth" \
+    --pretrain_path "${DATA_ROOT:-${HOME}/data}/weights/dino_deitsmall8_pretrain.pth" \
     --dataset-path "${HOME}/data/tiny-imagenet-10classes/train_flat/" \
     --num-folder-per-job 10 \
     --job-index 0 \

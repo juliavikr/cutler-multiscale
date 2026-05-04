@@ -1,7 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=maskcut-multiscale
-#SBATCH --account=3152697
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -10,8 +11,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=24:00:00
-#SBATCH --output=/home/3152697/cutler-multiscale/logs/maskcut_multiscale_%j.out
-#SBATCH --error=/home/3152697/cutler-multiscale/logs/maskcut_multiscale_%j.err
+#SBATCH --output=logs/maskcut_multiscale_%j.out
+#SBATCH --error=logs/maskcut_multiscale_%j.err
 
 set -euo pipefail
 
@@ -35,6 +36,7 @@ PRESET="small"
 echo "=== Running multi-scale MaskCut on 10-class TinyImageNet ==="
 python multiscale/multiscale_maskcut.py \
     --vit-arch small \
+    --vit-feat k \
     --patch-size 8 \
     --tau "${TAU}" \
     --fixed_size "${FIXED_SIZE}" \
@@ -42,7 +44,7 @@ python multiscale/multiscale_maskcut.py \
     --num-folder-per-job 10 \
     --job-index 0 \
     --dataset-path "${HOME}/data/tiny-imagenet-10classes/train_flat/" \
-    --pretrain_path "/mnt/beegfsstudents/home/3152697/weights/dino_deitsmall8_pretrain.pth" \
+    --pretrain_path "${DATA_ROOT:-${HOME}/data}/weights/dino_deitsmall8_pretrain.pth" \
     --out-dir "${ANNO_DIR}" \
     --multi-crop \
     --ms-preset "${PRESET}" \

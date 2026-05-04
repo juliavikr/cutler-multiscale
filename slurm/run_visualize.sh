@@ -8,7 +8,8 @@
 # Output: experiments/visualizations/baseline/<image_id>_<n>masks.png
 
 #SBATCH --job-name=visualize-masks
-#SBATCH --account=3355142
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1

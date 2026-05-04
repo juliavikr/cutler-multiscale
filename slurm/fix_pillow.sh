@@ -4,7 +4,8 @@
 # Detectron2 0.6 still references it; pinning Pillow<10 is the fix.
 
 #SBATCH --job-name=cutler-fix-pillow
-#SBATCH --account=3355142
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1

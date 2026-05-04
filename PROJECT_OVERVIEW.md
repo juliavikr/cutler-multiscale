@@ -323,16 +323,16 @@ SLURM writes stdout and stderr from cluster jobs here. The directory is tracked 
 
 ---
 
-## 8. Project Status (as of 2026-04-28)
+## 8. Project Status (as of 2026-05-04)
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | **Phase 1: Setup** | Done | Conda env, SLURM scripts, cluster paths, data downloaded |
-| **Phase 2: Baseline** | Done | CutLER reproduced — AP=12.33 matches paper |
-| **Phase 3: Multi-Scale** | In progress | Code written (`multiscale_maskcut.py`), not yet run on cluster |
+| **Phase 2: Baseline** | Done | CutLER reproduced — AP=12.33, APs=3.66 on COCO val2017 |
+| **Phase 3: Multi-Scale** | In progress | Baseline pseudo-labels exist (500 images, 748 annotations, 2026-05-01); multi-scale pseudo-labels (hybrid + MOST-lite v2 soft) pending generation with v2 code |
 | **Phase 4: Analysis** | Upcoming | Ablation studies, visualization, course report |
 
-The immediate next step is to run `run_multiscale_maskcut.sh` on the cluster to generate multi-scale pseudo-labels, then retrain the detector and evaluate.
+The immediate next steps are to generate multi-scale pseudo-labels with `run_multiscale_maskcut.sh`, then run the controlled comparison: baseline vs. multi-scale detector trained and evaluated on COCO val2017. See `PROJECT_NOTES.md` for the full phase log and active blockers.
 
 ---
 

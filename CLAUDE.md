@@ -14,19 +14,25 @@ Computer vision course project implementing CutLER as a baseline and extending i
 
 ```
 cutler-multiscale/
-├── CutLER/                  # Upstream CutLER repo (Facebook Research) — do not edit directly
-├── multiscale/              # Our custom code: multi-scale MaskCut extension
-│   ├── maskcut_ms.py        # Multi-scale MaskCut implementation
-│   ├── merge_proposals.py   # NMS/merging logic across scales
-│   └── ...
-├── experiments/             # Config files and run scripts
-├── notebooks/               # Analysis and visualization notebooks
-├── results/                 # Evaluation outputs (gitignored)
-├── slurm/                   # SLURM job scripts for the HPC cluster
-├── logs/                    # SLURM stdout/stderr logs (gitignored except .gitkeep)
-├── CLAUDE.md                # This file
-├── PROJECT_NOTES.md         # Status and running log
-└── README.md
+├── CutLER/                        # Upstream CutLER repo (Facebook Research) — do not edit directly
+├── multiscale/                    # Our custom code: multi-scale MaskCut extension
+│   ├── multiscale_maskcut.py      # Main implementation (v2, current)
+│   ├── multiscale_maskcut_hybrid.py  # Heatmap-only snapshot (ablation reference)
+│   ├── multiscale_maskcut_legacy.py  # v1 IoU-NMS snapshot (for reference)
+│   ├── MULTISCALE_MASKCUT.md      # Code guide and CLI reference
+│   ├── STRATEGY_COMPARISON.md    # Comparison of all crop proposal strategies
+│   └── EVALUATION_PROCESS.md     # Evaluation methodology and metrics
+├── tools/                         # Utility scripts (visualize, register, train wrapper)
+├── experiments/                   # environment.yml, rank_small_ap.py
+├── presentation/                  # Report draft, slides, design decisions
+├── results/                       # Results tables committed; large eval outputs gitignored
+├── slurm/                         # SLURM job scripts for the HPC cluster
+├── logs/                          # SLURM stdout/stderr logs (gitignored except .gitkeep)
+├── debug/                         # Single-image debug outputs (contact sheets, overlays)
+├── CLAUDE.md                      # This file
+├── PROJECT_NOTES.md               # Status, parameters, results, audit trail
+├── PROJECT_OVERVIEW.md            # Plain-English pipeline explanation
+└── README.md                      # Setup, reproduction, and run commands
 ```
 
 ## Branch Structure
@@ -77,11 +83,11 @@ All training and heavy computation runs on the Bocconi University HPC cluster.
 ### Key Cluster Paths
 
 ```bash
-# Project root on cluster (set this once after cloning)
-PROJECT=/path/to/cutler-multiscale   # update once known
+# Project root on cluster
+PROJECT=${HOME}/cutler-multiscale
 
 # Data
-DATA_ROOT=/mnt/data                  # update once known — large files live here
+DATA_ROOT=${HOME}/data               # large files live here
 
 # Activate env
 module load miniconda3

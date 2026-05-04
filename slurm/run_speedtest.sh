@@ -3,7 +3,8 @@
 #SBATCH --job-name=cutler-speedtest
 #SBATCH --partition=stud
 #SBATCH --qos=stud
-#SBATCH --account=3152697
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
@@ -21,7 +22,7 @@ conda activate cutler
 python3 -c "import torch; print('CUDA:', torch.cuda.is_available())"
 
 # --- Paths (edit before submitting) ---
-REPO_ROOT="/home/3152697/cutler-multiscale"
+REPO_ROOT="${HOME}/cutler-multiscale"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
 DATASET_PATH="${DATA_ROOT}/tiny-imagenet-1/train"         # 200 class subdirectories
 OUT_DIR="${REPO_ROOT}/pseudo_masks/speedtest"
