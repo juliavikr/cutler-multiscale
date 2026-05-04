@@ -42,7 +42,7 @@ python multiscale/multiscale_maskcut.py \
     --num-folder-per-job 10 \
     --job-index 0 \
     --dataset-path "${HOME}/data/tiny-imagenet-10classes/train/" \
-    --pretrain_path "${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+    --pretrain_path "/mnt/beegfsstudents/home/3152697/weights/dino_deitsmall8_pretrain.pth" \
     --out-dir "${ANNO_DIR}" \
     --multi-crop \
     --ms-preset "${PRESET}" \
