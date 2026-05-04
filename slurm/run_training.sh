@@ -71,5 +71,11 @@ python "${HOME}/cutler-multiscale/tools/train_wrapper.py" \
     --num-gpus 1 \
     --config-file model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml \
     DATASETS.TRAIN "(\"tinyimagenet_${PSEUDO_LABEL_NAME}_pseudo\",)" \
-    SOLVER.
+    SOLVER.IMS_PER_BATCH 8 \
+    SOLVER.BASE_LR 0.005 \
+    SOLVER.MAX_ITER 20000 \
+    SOLVER.STEPS "(15000,)" \
+    SOLVER.WARMUP_ITERS 1000 \
+    DATALOADER.NUM_WORKERS 2 \
+    OUTPUT_DIR "${OUTPUT_DIR}"
 
