@@ -13,6 +13,20 @@ This document explains `multiscale/multiscale_maskcut.py`: what each part does, 
 
 The main motivation is to improve small-object discovery by "zooming in" through smaller crops.
 
+## Recommended Comparison
+
+The project should focus on these three methods:
+
+| Method | Role | Required flags |
+| --- | --- | --- |
+| Baseline MaskCut | Full-image reference point | no `--multi-crop` |
+| Hybrid heatmap | Main multiscale method | `--multi-crop --ms-preset small` |
+| MOST-lite v2 soft | Experimental token-cluster method | `--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45` |
+
+The multiscale scripts always write split outputs. For training and quantitative
+comparison, use `multiscale` for hybrid and MOST-lite v2 soft. Keep `combined`
+as a visual/debug output because it can contain overlapping normal + crop masks.
+
 ## File Structure and Logic
 
 ## 1) Imports and preprocessing
@@ -192,66 +206,76 @@ Baseline controls still apply:
 
 ## How to Use
 
-## Option A: Direct Python
+Use the same base MaskCut settings for all three methods:
 
-From repository root:
-
-```bash
-python multiscale/multiscale_maskcut.py \
-  --vit-arch small \
-  --vit-feat k \
-  --patch-size 8 \
-  --tau 0.2 \
-  --N 3 \
-  --fixed_size 480 \
-  --dataset-path /path/to/train \
-  --num-folder-per-job 200 \
-  --job-index 0 \
-  --pretrain_path /path/to/dino_deitsmall8_pretrain.pth \
-  --out-dir /path/to/output \
-  --multi-crop \
-  --crop-scales 1.0,0.75,0.5 \
-  --crop-overlap 0.3 \
-  --crop-max-per-scale 9 \
-  --merge-iou-thresh 0.5 \
-  --keep-topk 20 \
-  --min-mask-area-ratio 0.0005 \
-  --max-mask-area-ratio 1.0 \
-  --small-first
+```text
+--vit-arch small
+--vit-feat k
+--patch-size 8
+--tau 0.15
+--N 3
+--fixed_size 480
 ```
 
-## Option B: SLURM script
+## Option A: SLURM Commands
 
-Use:
-
-1. `slurm/run_multiscale_maskcut.sh`
-
-Example:
+### Baseline
 
 ```bash
-TAU=0.2 \
+sbatch slurm/run_maskcut_baseline.sh
+```
+
+### Hybrid heatmap
+
+```bash
+DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
+OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
+DINO_WEIGHTS="${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+TAU=0.15 \
 N_MASKS=3 \
-CROP_SCALES=1.0,0.75,0.5 \
-CROP_OVERLAP=0.3 \
-CROP_MAX_PER_SCALE=9 \
-MERGE_IOU_THRESH=0.5 \
-KEEP_TOPK=20 \
-MIN_MASK_AREA_RATIO=0.0005 \
-MAX_MASK_AREA_RATIO=1.0 \
-SMALL_FIRST=1 \
+FIXED_SIZE=480 \
+NUM_FOLDER_PER_JOB=10 \
+MS_PRESET=small \
+PRIMARY_OUTPUT=multiscale \
 sbatch slurm/run_multiscale_maskcut.sh
 ```
 
-## Practical starting presets
+### MOST-lite v2 soft
 
-For small-object emphasis (first sweep):
+```bash
+DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
+OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
+DINO_WEIGHTS="${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+TAU=0.15 \
+N_MASKS=3 \
+FIXED_SIZE=480 \
+NUM_FOLDER_PER_JOB=10 \
+MS_PRESET=mostlite \
+CRF_IOU_THRESH=0.45 \
+PRIMARY_OUTPUT=multiscale \
+sbatch slurm/run_multiscale_maskcut.sh
+```
 
-1. `tau`: `0.15` and `0.2`
-2. `N`: `3` and `5`
-3. `crop_scales`: `1.0,0.75,0.5` then add `0.35` if budget allows
-4. `crop_overlap`: `0.3`
-5. `merge_iou_thresh`: `0.5`
-6. `small_first`: enabled
+## Option B: Direct Python Flags
+
+From repository root, baseline is the same command without `--multi-crop`.
+
+Hybrid heatmap adds:
+
+```text
+--multi-crop --ms-preset small --primary-output multiscale
+```
+
+MOST-lite v2 soft adds:
+
+```text
+--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45 --primary-output multiscale
+```
+
+For reference, the `mostlite` preset already enables the v2 cleanup behavior:
+`--crop-n 1`, `--crop-keep-per-window 1`, border retry, crop-shape rejection,
+token-cluster alignment scoring, and the stricter default CRF threshold. The
+v2-soft command changes only the CRF threshold from `0.50` to `0.45`.
 
 ## Notes and limitations
 
@@ -259,3 +283,5 @@ For small-object emphasis (first sweep):
 2. Very aggressive scales/overlap can create many near-duplicate masks.
 3. `keep_topk` is useful to bound annotation volume.
 4. This script keeps output format compatible with CutLER training.
+5. Do not compare runs with different `tau`, `N`, `fixed_size`, DINO weights, or
+   image subsets.

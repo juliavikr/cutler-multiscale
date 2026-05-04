@@ -25,11 +25,11 @@ Run every method on the same images with the same base MaskCut settings.
 | --- | --- | --- |
 | Normal MaskCut | `normal` split | Full-image baseline |
 | Hybrid heatmap multiscale | `--multi-crop --ms-preset small` | Current main candidate |
-| MOST-lite multiscale | `--multi-crop --ms-preset mostlite` | Experimental token-cluster proposal candidate |
+| MOST-lite v2 soft | `--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45` | Experimental token-cluster proposal candidate |
 | Raw multiscale | `raw_multiscale` split | Debug crop-mask discovery before final filtering |
 | Combined | `combined` split | Diagnostic view of normal + crop masks |
 
-For final claims, compare `normal`, `hybrid multiscale`, and `MOST-lite`.
+For final claims, compare `normal`, `hybrid multiscale`, and `MOST-lite v2 soft`.
 Use `raw_multiscale` and `combined` mainly to understand failures.
 
 ## Evaluation Levels
@@ -102,7 +102,7 @@ Example:
 | --- | --- | --- | --- |
 | Baseline | normal MaskCut | same | COCO val2017 |
 | Hybrid | hybrid multiscale | same | COCO val2017 |
-| MOST-lite | MOST-lite multiscale | same | COCO val2017 |
+| MOST-lite v2 soft | MOST-lite v2 soft multiscale | same | COCO val2017 |
 
 Every training hyperparameter should stay identical. Otherwise the comparison is
 not attributable to the pseudo-label method.
@@ -147,7 +147,7 @@ For this project, the most important metric is:
 Small Recall@0.50
 ```
 
-If hybrid or MOST-lite improves this without extreme noise, that is a strong sign
+If hybrid or MOST-lite v2 soft improves this without extreme noise, that is a strong sign
 the method is doing what it was designed to do.
 
 ### Average Recall At K
@@ -169,7 +169,7 @@ Example table:
 | --- | ---: | ---: | ---: | ---: |
 | Normal | | | | |
 | Hybrid | | | | |
-| MOST-lite | | | | |
+| MOST-lite v2 soft | | | | |
 
 ### Predicted Mask Statistics
 
@@ -270,14 +270,14 @@ Build visuals that tell the story clearly.
 Use the same image in four panels:
 
 ```text
-Normal | Hybrid multiscale | MOST-lite | Combined
+Normal | Hybrid multiscale | MOST-lite v2 soft | Combined
 ```
 
 Purpose:
 
 - shows what normal MaskCut already finds,
 - shows what hybrid adds,
-- shows what MOST-lite changes,
+- shows what MOST-lite v2 soft changes,
 - shows why combined is useful visually but risky for training.
 
 Use 2-3 strong examples:
@@ -308,7 +308,7 @@ but keep only a few final masks.
 Draw crop boxes on the original image:
 
 ```text
-Hybrid heatmap crops | MOST-lite token-cluster crops
+Hybrid heatmap crops | MOST-lite v2 soft token-cluster crops
 ```
 
 Purpose:
@@ -404,7 +404,7 @@ Choose a multiscale method only if it improves Small Recall@0.50 by at least
 For the final project, the strongest result would be:
 
 ```text
-Hybrid or MOST-lite improves pseudo-mask Small Recall@0.50 and improves detector
+Hybrid or MOST-lite v2 soft improves pseudo-mask Small Recall@0.50 and improves detector
 APs after training.
 ```
 
@@ -477,7 +477,7 @@ Measure whether pseudo-mask improvements transfer to APs/APm/AP.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Normal | | | | | | |
 | Hybrid | | | | | | |
-| MOST-lite | | | | | | |
+| MOST-lite v2 soft | | | | | | |
 
 ### Size-Binned Recall Table
 
@@ -485,7 +485,7 @@ Measure whether pseudo-mask improvements transfer to APs/APm/AP.
 | --- | ---: | ---: | ---: |
 | Normal | | | |
 | Hybrid | | | |
-| MOST-lite | | | |
+| MOST-lite v2 soft | | | |
 
 ### Downstream Detector Table
 
@@ -493,7 +493,7 @@ Measure whether pseudo-mask improvements transfer to APs/APm/AP.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Normal pseudo-labels | | | | | | |
 | Hybrid pseudo-labels | | | | | | |
-| MOST-lite pseudo-labels | | | | | | |
+| MOST-lite v2 soft pseudo-labels | | | | | | |
 
 ## What A Good Result Looks Like
 
@@ -510,6 +510,6 @@ An ideal presentation conclusion:
 ```text
 Multi-scale MaskCut improves small-object pseudo-mask discovery by using DINO
 features to choose informative local crops. The hybrid heatmap method gives the
-best reliability/speed tradeoff, while MOST-lite is a promising token-cluster
-proposal direction for cleaner future crop selection.
+best reliability/speed tradeoff, while MOST-lite v2 soft is a promising
+token-cluster proposal direction for cleaner future crop selection.
 ```

@@ -13,7 +13,7 @@ For the next experiments, compare these three outputs on the same image set:
 | ------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------- |
 | Normal MaskCut            | `multiscale_maskcut.py` without `--multi-crop`, or the `normal` split | Baseline quality check                            |
 | Hybrid heatmap multi-crop | `--multi-crop --ms-preset small`                                          | Current main candidate                            |
-| MOST-lite token proposals | `--multi-crop --ms-preset mostlite`                                       | Experimental candidate for cleaner crop selection |
+| MOST-lite v2 soft         | `--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45`                | Experimental token-cluster candidate              |
 
 Keep `combined` as a diagnostic output for now. It is useful visually, but it can
 create overlapping or hierarchical pseudo-labels that may confuse detector
@@ -342,7 +342,7 @@ Use it when evaluating whether the crop stage is capable of finding small object
 
 Do not treat it as a final method. It is a debugging artifact.
 
-## Strategy 6: MOST-Lite Token-Cluster Crop Proposals
+## Strategy 6: MOST-Lite v2 Soft Token-Cluster Crop Proposals
 
 ### What It Does
 
@@ -352,17 +352,22 @@ MOST-lite is the new experimental architecture in:
 multiscale/multiscale_maskcut.py
 ```
 
-Run it with:
+Run the project candidate, MOST-lite v2 soft, with:
+
+```text
+--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45
+```
+
+The plain preset defaults to v2 strict behavior:
 
 ```text
 --multi-crop --ms-preset mostlite
 ```
 
-or explicitly:
-
-```text
---multi-crop --crop-mode mostlite
-```
+The only difference between v2 strict and v2 soft is the CRF agreement threshold:
+v2 strict uses `--crf-iou-thresh 0.5`, while v2 soft uses `0.45`. We chose v2
+soft as the MOST-lite candidate because it keeps the v2 cleanup behavior but is
+slightly less likely to discard useful crop masks.
 
 It is inspired by object proposal methods that use DINO token structure more
 directly instead of selecting crops from a generic grid or contrast heatmap.
@@ -390,7 +395,8 @@ prototype:
   borders;
 - masks are scored against the DINO token cluster that proposed the crop;
 - CRF agreement defaults to `--crf-iou-thresh 0.5`, closer to original MaskCut
-  post-processing.
+  post-processing. For the project comparison, override this to `0.45` to run
+  v2 soft.
 
 ### Why It Might Be Better
 
@@ -443,7 +449,7 @@ the object is defined more by shape than by a distinct DINO feature cluster.
 
 ## Main Differences
 
-| Dimension             | Normal       | Legacy grid           | Hybrid heatmap              | MOST-lite                     |
+| Dimension             | Normal       | Legacy grid           | Hybrid heatmap              | MOST-lite v2 soft             |
 | --------------------- | ------------ | --------------------- | --------------------------- | ----------------------------- |
 | Crop proposal         | None         | Dense sliding windows | DINO feature-contrast peaks | DINO token clusters           |
 | Compute cost          | Low          | High                  | Medium                      | Medium                        |
@@ -452,7 +458,7 @@ the object is defined more by shape than by a distinct DINO feature cluster.
 | Duplicate risk        | Low          | High                  | Medium                      | Lower if clusters behave well |
 | Side-object coverage  | Not targeted | Strong                | Depends on heatmap/rescue   | Depends on token seeds        |
 | Parameter sensitivity | Low          | Medium                | High                        | High                          |
-| Best role             | Baseline     | Recall diagnostic     | Current candidate           | Experimental candidate        |
+| Best role             | Baseline     | Recall diagnostic     | Main candidate              | Experimental comparison       |
 
 ## Why Presets Matter
 
@@ -471,7 +477,7 @@ The presets are meant to reduce manual tuning:
 | ------------ | --------- | ------------------------------------------------------------- |
 | `small`    | heatmap   | Current default, favors small masks and score-first filtering |
 | `balanced` | heatmap   | Less aggressive, useful if `small` is too strict            |
-| `mostlite` | mostlite  | Experimental DINO token-cluster proposal mode                 |
+| `mostlite` | mostlite  | v2 strict by default; add `--crf-iou-thresh 0.45` for v2 soft |
 | `legacy`   | grid      | Older dense-grid behavior for recall comparison               |
 
 When comparing methods, prefer changing the preset first. Only tune individual
@@ -501,8 +507,7 @@ Useful stats to record:
 
 ## Practical Next Steps
 
-1. Run the same single debug image with `small`, `balanced`, `legacy`, and
-   `mostlite`.
+1. Run the same images with baseline, hybrid heatmap, and MOST-lite v2 soft.
 2. Convert all split outputs to overlays.
 3. Compare `raw_multiscale` vs `multiscale` to see whether good masks are being
    filtered out.
@@ -520,7 +525,7 @@ Useful stats to record:
 | Legacy grid                 | Many masks, high recall, noisy                         |
 | Hybrid heatmap small preset | Fewer masks, more targeted small-object additions      |
 | Hybrid balanced preset      | More forgiving than `small`, possibly noisier        |
-| MOST-lite                   | Fewer object-like crop proposals, experimental quality |
+| MOST-lite v2 soft           | Fewer object-like crop proposals, experimental quality |
 | Combined                    | Best visual coverage, risky training target            |
 
 ## Current Project Position
@@ -533,9 +538,14 @@ Does multiscale add visually good small-object masks that normal MaskCut misses,
 without adding too many fragments or duplicate overlaps?
 ```
 
-Right now, the most defensible candidate is still the hybrid heatmap strategy with
+Right now, the most defensible main candidate is the hybrid heatmap strategy with
 `--ms-preset small`, because it is targeted and already has debug tooling. The
-MOST-lite strategy is worth testing because it moves crop proposal closer to
-object-level DINO structure, but it should be treated as experimental until the
-overlays show that it improves small-object mask quality rather than just changing
-where crops are sampled.
+MOST-lite comparison should use v2 soft:
+
+```text
+--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45
+```
+
+Use v2 soft rather than v1 or v2 strict because v1 is too permissive/noisy, while
+v2 strict can drop useful masks. V2 soft keeps the cleanup behavior and relaxes
+only the CRF agreement threshold.

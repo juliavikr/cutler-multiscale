@@ -22,15 +22,17 @@ Both the baseline (single-scale) and multi-scale MaskCut runs on TinyImageNet mu
 | --fixed_size | 480 | resize input to 480×480 square |
 | --pretrain_path | ~/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth | DINO weights |
 
-### Multi-scale-only parameters (added on top for multiscale run)
+### Method variants to run
 
-| Parameter | Value | Purpose |
+| Method | Added parameters | Purpose |
 | --- | --- | --- |
-| --multi-crop | flag | enable multi-scale mode |
-| --crop-scales | 1.0,0.75,0.5 | three zoom levels |
-| --crop-overlap | 0.3 | sliding window overlap |
-| --merge-iou-thresh | 0.5 | NMS IoU threshold for deduplication |
-| --small-first | flag | prefer keeping small masks during NMS (helps APs) |
+| Baseline | no `--multi-crop` | original full-image MaskCut reference |
+| Hybrid heatmap | `--multi-crop --ms-preset small --primary-output multiscale` | main multiscale candidate |
+| MOST-lite v2 soft | `--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45 --primary-output multiscale` | experimental token-cluster comparison |
+
+Keep all shared parameters identical across methods. The hybrid and MOST-lite
+runs both write split outputs; use the `multiscale` split for training/evaluation
+and keep `combined` only for diagnostics.
 
 ### Dataset
 
@@ -63,17 +65,20 @@ Estimated runtimes:
 ### Output JSONs (target locations)
 
 - Baseline: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json
-- Multi-scale: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json
+- Hybrid heatmap: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_hybrid_pseudo.json
+- MOST-lite v2 soft: ~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_mostlite_v2_soft_pseudo.json
 
 ### Generated artifacts
 
 | Artifact | Status | Location (cluster) | Size | Images | Annotations | Generated |
 |----------|--------|--------------------|------|--------|-------------|-----------|
 | Baseline pseudo-labels | **exists** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json` | 321 KB | 500 | 748 | 2026-05-01 |
-| Multiscale pseudo-labels | **pending** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_multiscale_pseudo.json` | — | — | — | pending Luiz's finalization |
+| Hybrid pseudo-labels | **pending** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_hybrid_pseudo.json` | — | — | — | pending |
+| MOST-lite v2 soft pseudo-labels | **pending** | `~/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_mostlite_v2_soft_pseudo.json` | — | — | — | pending |
 
 These JSONs are not committed to Git (regeneratable, and excluded by `.gitignore`).
 To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
+To run hybrid and MOST-lite v2 soft, use the commands in `README.md`.
 
 ---
 
@@ -175,6 +180,7 @@ To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
 - MOST-lite mode uses one full-image DINO pass to seed foreground-like tokens, grows compact feature-similar token clusters, converts clusters into crop boxes, then runs crop MaskCut only on those boxes.
 - MOST-lite preset now keeps full-image `--N` separate from crop iterations: full-image MaskCut can stay at `--N 3`, while crop proposals default to `--crop-n 1`.
 - MOST-lite now retries internally border-touching crop masks on larger crops, rejects crop-shaped masks, scores masks against the DINO token cluster that proposed the crop, and uses the original-style stricter CRF agreement threshold (`--crf-iou-thresh 0.5`).
+- For the project comparison, run MOST-lite v2 soft by overriding that threshold to `--crf-iou-thresh 0.45`.
 - Advanced thresholds remain available as overrides, but normal experiments should start from `--ms-preset small` or `--ms-preset balanced` instead of tuning every knob.
 
 ---
@@ -248,9 +254,10 @@ Multi-scale generates 7.5x more annotations, concentrated in small objects.
 - New: score each window by (1 - coverage_ratio) × (1 + edge_density/128), keep top-N
 - Edge density = mean gradient magnitude — high in textured/object-rich areas
 
-**To run with new features:**
-TWO_STAGE_CROP=1 CROP_SCALES=1.0,0.75,0.5 N_MASKS=3 sbatch slurm/run_multiscale_maskcut.sh
-Use `--crop-top-k 8` to keep only 8 most informative windows per image.
+**Current runs to use:**
+- Baseline: `sbatch slurm/run_maskcut_baseline.sh`
+- Hybrid: `MS_PRESET=small TAU=0.15 N_MASKS=3 NUM_FOLDER_PER_JOB=10 PRIMARY_OUTPUT=multiscale sbatch slurm/run_multiscale_maskcut.sh`
+- MOST-lite v2 soft: `MS_PRESET=mostlite CRF_IOU_THRESH=0.45 TAU=0.15 N_MASKS=3 NUM_FOLDER_PER_JOB=10 PRIMARY_OUTPUT=multiscale sbatch slurm/run_multiscale_maskcut.sh`
 
 ### Phase 3: Detector Training — First Run (2026-05-01)
 

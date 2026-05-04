@@ -21,10 +21,12 @@ conda activate cutler
 # --- Paths (edit before submitting) ---
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
-DATASET_PATH="${DATA_ROOT}/tiny-imagenet-200/train"         # 200 class subdirectories
-OUT_DIR="${REPO_ROOT}/pseudo_masks/tiny_imagenet"
-DINO_WEIGHTS="${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth"
+DATASET_PATH="${DATASET_PATH:-${DATA_ROOT}/tiny-imagenet-200/train}"
+OUT_DIR="${OUT_DIR:-${REPO_ROOT}/pseudo_masks/tiny_imagenet}"
+DINO_WEIGHTS="${DINO_WEIGHTS:-${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth}"
 MASKCUT_SCRIPT="${MASKCUT_SCRIPT:-multiscale/multiscale_maskcut.py}"
+NUM_FOLDER_PER_JOB="${NUM_FOLDER_PER_JOB:-200}"
+JOB_INDEX="${JOB_INDEX:-0}"
 
 mkdir -p "${OUT_DIR}"
 
@@ -138,8 +140,8 @@ python "${REPO_ROOT}/${MASKCUT_SCRIPT}" \
     --fixed_size "${FIXED_SIZE}" \
     --N "${N_MASKS}" \
     --dataset-path "${DATASET_PATH}" \
-    --num-folder-per-job 200 \
-    --job-index 0 \
+    --num-folder-per-job "${NUM_FOLDER_PER_JOB}" \
+    --job-index "${JOB_INDEX}" \
     --pretrain_path "${DINO_WEIGHTS}" \
     --out-dir "${OUT_DIR}" \
     "${EXTRA_ARGS[@]}"
