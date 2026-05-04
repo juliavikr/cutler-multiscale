@@ -80,14 +80,31 @@ To recreate the baseline JSON: `sbatch slurm/run_maskcut_baseline.sh`
 ## Compute Environment
 
 **Cluster:** Bocconi University HPC (`slogin.hpc.unibocconi.it`)
-**Username:** 3355142
+**Username:** 3152697
 **GPU:** NVIDIA A100 80GB
-**Scheduler:** SLURM — partition `stud`, qos `stud`, account `3355142`
+**Scheduler:** SLURM — partition `stud`, qos `stud`, account `3152697`
 **Conda env:** `cutler` — Python 3.9, CUDA 12.1, PyTorch
 
 **Local Mac:** Code editing only via Claude Code. No training or heavy compute.
 
 **Workflow:** edit locally → `git push` → `ssh` into cluster → `git pull` → `sbatch`
+
+---
+
+## MaskCut Code Versions
+
+### v1 — IoU-NMS merging (used in first training run, job 486811)
+- Mask merging: greedy NMS — if IoU > threshold, drop newer mask
+- Crop selection: binary skip/keep by coverage ratio
+- Used to generate: `pseudo_masks/tiny_imagenet/` (5-class, 2500 images)
+- SLURM: old `run_multiscale_maskcut.sh`
+
+### v2 — Graph-based merging + crop ranking (current, 2026-05-01)
+- Mask merging: graph-based — connect masks by IoU, containment, or box adjacency; union connected components
+- Crop ranking: score each window by `(1 - coverage_ratio) × (1 + edge_density/128)`, keep top-N
+- Preset system: `--ms-preset small/balanced/mostlite/legacy`
+- Used to generate: `~/data/tiny-imagenet-10classes/annotations/` (10-class, 5000 images) — **in progress (jobs 488240, 488241)**
+- SLURM: `run_maskcut_baseline.sh`, `run_multiscale_maskcut_tinyimagenet.sh`
 
 ---
 
@@ -189,7 +206,8 @@ Evaluated on COCO val2017, class-agnostic, unsupervised (no labels used).
 |--------|----|------|------|-----|-----|-----|-------|
 | CutLER (paper) | 8.3 | 13.8 | 8.0 | — | — | — | reported in paper |
 | CutLER (ours) | **12.33** | **21.98** | **11.90** | **3.66** | **12.72** | **29.60** | cutler_cascade_final.pth, 2026-04-27 |
-| MS-MaskCut (ours) | — | — | — | — | — | — | to be filled |
+| MS-MaskCut v1, 5-class (ours) | — | — | — | — | — | — | training pending |
+| MS-MaskCut v2, 10-class (ours) | — | — | — | — | — | — | MaskCut pending (jobs 488240/488241) |
 
 ### Instance Segmentation (SEGM)
 
@@ -197,7 +215,8 @@ Evaluated on COCO val2017, class-agnostic, unsupervised (no labels used).
 |--------|----|------|------|-----|-----|-----|-------|
 | CutLER (paper) | — | — | — | — | — | — | not reported separately |
 | CutLER (ours) | **9.78** | **18.92** | **9.19** | **2.44** | **8.77** | **24.29** | cutler_cascade_final.pth, 2026-04-27 |
-| MS-MaskCut (ours) | — | — | — | — | — | — | to be filled |
+| MS-MaskCut v1, 5-class (ours) | — | — | — | — | — | — | training pending |
+| MS-MaskCut v2, 10-class (ours) | — | — | — | — | — | — | MaskCut pending (jobs 488240/488241) |
 
 ---
 
@@ -233,7 +252,7 @@ Single-scale vs multi-scale MaskCut on same 5 TinyImageNet classes (2500 images)
 
 Multi-scale generates 7.5x more annotations, concentrated in small objects.
 
-### Code Update: Graph-based merging + crop ranking (2026-05-01)
+### Code Update: Graph-based merging + crop ranking — v2 (2026-05-01)
 
 **Graph-based mask merging** (`merge_masks`, lines 380-486):
 - Old: greedy NMS — if IoU > threshold, drop newer mask
@@ -252,7 +271,7 @@ Multi-scale generates 7.5x more annotations, concentrated in small objects.
 TWO_STAGE_CROP=1 CROP_SCALES=1.0,0.75,0.5 N_MASKS=3 sbatch slurm/run_multiscale_maskcut.sh
 Use `--crop-top-k 8` to keep only 8 most informative windows per image.
 
-### Phase 3: Detector Training — First Run (2026-05-01)
+### Detector Training — Run 1: v1 multiscale code, 5-class TinyImageNet (2026-05-01)
 
 **Model:** Cascade Mask R-CNN R50 FPN
 - Multiple detection heads cascaded for better accuracy
@@ -260,6 +279,7 @@ Use `--crop-top-k 8` to keep only 8 most informative windows per image.
 - 160,000 iterations, LR drops at 80,000
 - Batch size 2 (scaled down from default 16 for 8 GPUs)
 - Input: 2500 TinyImageNet-5 images, 24,771 multi-scale pseudo-label annotations
+- **MaskCut code version: v1 (IoU-NMS, no graph merging)**
 - Evaluation: COCO val2017 AP-Small and AP-Medium
 
 **Results — Multi-scale pseudo-labels (job 486811):**
