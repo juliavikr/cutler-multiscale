@@ -1,216 +1,171 @@
 # Project Notes — cutler-multiscale
 
-## Current Status: Phase 3 — Multi-Scale MaskCut (in progress)
+## TL;DR
 
-**Started:** 2026-04-20 | **Last updated:** 2026-05-04
-
-Baseline pseudo-labels exist (500 images, 748 annotations, 2026-05-01). Multi-scale pseudo-labels (hybrid heatmap, MOST-lite v2 soft) are **pending** generation with the v2 code. A first detector training run (v1 code, 5-class subset) produced near-zero COCO AP as expected given the tiny training set. The controlled comparison — baseline vs multi-scale, same 10-class dataset, same detector — has not yet been run.
-
-**Immediate next steps:**
-1. Generate v2 multi-scale pseudo-labels: `sbatch slurm/run_multiscale_maskcut.sh` (see `README.md` for env-var invocations)
-2. Run baseline detector training: `PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh`
-3. Run multi-scale detector training: `PSEUDO_LABEL_NAME=multiscale sbatch slurm/run_training.sh`
-4. Evaluate both on COCO val2017, compare APs/APm
+We have reproduced CutLER's published COCO results (AP=12.33, APs=3.66) and generated single-scale baseline pseudo-labels on a 500-image, 10-class TinyImageNet subset (748 masks). The hybrid multi-scale variant is currently generating pseudo-labels (SLURM job 488887, 6–12h ETA). Once that job finishes we train two Cascade Mask R-CNN detectors under identical settings — one on baseline pseudo-labels, one on hybrid — and evaluate both on COCO val2017. The headline question is whether hybrid multi-scale MaskCut improves APs (small-object AP).
 
 ---
 
-## Experiment Setup
+## Project Goal
 
-### Locked Parameters
+We extend CutLER by replacing its single-scale MaskCut pseudo-label generator with a multi-scale variant that runs additional MaskCut passes inside DINO-heatmap-guided crops and merges the results. The hypothesis is that cropping before MaskCut gives more patches-per-object for small objects, improving pseudo-label recall and ultimately APs after detector training. We compare baseline vs. hybrid multi-scale end-to-end on COCO val2017 using a controlled 10-class TinyImageNet training subset.
 
-Both baseline and multi-scale runs **must** use these identical settings. Any change invalidates the comparison and requires re-running both.
+---
+
+## Status Checklist
+
+### Phase 1 — Setup
+- [x] Cluster access, conda env, all dependencies installed
+- [x] COCO val2017 + pre-trained CutLER checkpoint downloaded
+- [x] Repo structure with CutLER submodule, branches, .gitignore
+- [x] All SLURM scripts working (account=3355142, partition=stud, qos=stud)
+
+### Phase 2 — Baseline reproduction
+- [x] Pre-trained CutLER eval on COCO val2017 — AP=12.33, APs=3.66 (matches paper)
+
+### Phase 3 — Pseudo-label generation on TinyImageNet 10-class subset
+- [x] TinyImageNet downloaded and restructured (50 images × 10 classes = 500 images total)
+- [x] Single-scale baseline MaskCut → `tinyimagenet_10c_baseline_pseudo.json` (500 imgs, 748 masks)
+- [~] Hybrid multi-scale MaskCut → `tinyimagenet_10c_hybrid_pseudo.json` (job 488887 running, 6–12h ETA)
+
+### Phase 4 — Detector training (pending Phase 3)
+- [ ] Train detector A on baseline pseudo-labels
+- [ ] Train detector B on hybrid pseudo-labels
+- [ ] Both use `cascade_mask_rcnn_R_50_FPN` config, single GPU, MAX_ITER=20000, IMS_PER_BATCH=8, BASE_LR=0.005
+
+### Phase 5 — Evaluation on COCO val2017 (pending Phase 4)
+- [ ] Evaluate detector A on COCO val2017 cls_agnostic
+- [ ] Evaluate detector B on COCO val2017 cls_agnostic
+- [ ] Compare APs improvement (the headline metric)
+
+### Phase 6 — Report and presentation (parallel with Phases 4–5)
+- [ ] Pseudo-mask visualizations (baseline vs. hybrid, 5–10 example images)
+- [ ] Results tables filled with real numbers
+- [ ] Slide deck draft
+- [ ] Written report
+
+---
+
+## Locked Experiment Parameters
+
+**Any change to these invalidates comparisons and requires re-running both legs.**
+
+### Shared MaskCut settings
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | `--vit-arch` | `small` | DINO ViT-Small backbone |
-| `--vit-feat` | `k` | key features from attention |
+| `--vit-feat` | `k` | key features from self-attention |
 | `--patch-size` | `8` | 8×8 pixel patches |
 | `--tau` | `0.15` | affinity graph threshold |
-| `--N` | `3` | max masks per image |
-| `--fixed_size` | `480` | resize input to 480×480 square |
-| `--pretrain_path` | `${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth` | DINO pretrained weights |
+| `--N` | `3` | max masks per image (full-image pass) |
+| `--fixed_size` | `480` | resize input to 480×480 |
+| `--pretrain_path` | `${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth` | DINO ViT-S/8 weights |
+| `--num-folder-per-job` | `10` | process all 10 class folders in one job |
+| `--job-index` | `0` | single-job run |
 
-### Method Variants
+### Hybrid-only additional flags
 
-| Method | Flags | Training output |
-|--------|-------|-----------------|
-| Baseline | *(no `--multi-crop`)* | `normal` split |
-| Hybrid heatmap | `--multi-crop --ms-preset small --primary-output multiscale` | `multiscale` split |
-| MOST-lite v2 soft | `--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45 --primary-output multiscale` | `multiscale` split |
+| Flag | Value |
+|------|-------|
+| `--multi-crop` | enabled |
+| `--ms-preset` | `small` |
 
-Use the `multiscale` split for training and quantitative evaluation. Use `combined`, `raw_multiscale`, and `candidate_debug` for diagnosis only — `combined` can contain overlapping normal + crop masks and should not be used as a training target.
+### Training settings
 
-See `README.md` for the exact `sbatch` commands for all three methods.
+| Parameter | Value |
+|-----------|-------|
+| Config | `cascade_mask_rcnn_R_50_FPN` |
+| MAX_ITER | 20000 |
+| IMS_PER_BATCH | 8 |
+| BASE_LR | 0.005 |
+| GPUs | 1 (A100) |
 
-### Dataset
+### 10-class subset
 
-- **Path (cluster):** `~/data/tiny-imagenet-10classes/train/`
-- **Size:** 10 classes × 50 images = **500 images total**
-- **Classes:** n01443537 (goldfish), n02123045 (tabby cat), n02281406 (sulphur butterfly), n02410509 (bison), n02906734 (broom), n03100240 (convertible), n03444034 (go-kart), n04067472 (reel), n04254777 (sock), n07711569 (mashed potato)
-- **Why 10 classes, not more:** Baseline runs ~6–7 s/image on A100; multi-scale ~10× more MaskCut calls per image. 500 images fits the cluster's 24h time limit with margin for re-runs. 50 classes (~2,500 images) would require ~50h and not fit. See `presentation/04_design_decisions/why_tinyimagenet.md` for full rationale.
-
----
-
-## Generated Artifacts
-
-Pseudo-label JSONs are **not committed to git** (regeneratable; excluded by `.gitignore`). All live on the cluster at `~/data/tiny-imagenet-10classes/annotations/`.
-
-| Artifact | Status | Filename | Images | Annotations | Date |
-|----------|--------|----------|--------|-------------|------|
-| Baseline pseudo-labels | **exists** | `tinyimagenet_10c_baseline_pseudo.json` | 500 | 748 | 2026-05-01 |
-| Hybrid heatmap pseudo-labels | **pending** | `tinyimagenet_10c_hybrid_pseudo.json` | — | — | — |
-| MOST-lite v2 soft pseudo-labels | **pending** | `tinyimagenet_10c_mostlite_v2_soft_pseudo.json` | — | — | — |
-
-To regenerate baseline: `sbatch slurm/run_maskcut_baseline.sh`
-To generate multi-scale variants: see `README.md`.
+`n01443537` (goldfish), `n02123045` (tabby cat), `n02281406` (sulphur butterfly), `n02410509` (bison), `n02906734` (broom), `n03100240` (convertible), `n03444034` (go-kart), `n04067472` (reel), `n04254777` (sock), `n07711569` (mashed potato)
 
 ---
 
-## Compute Environment
+## Compute Setup (cluster)
 
-| Setting | Value |
-|---------|-------|
-| Cluster | Bocconi HPC (`slogin.hpc.unibocconi.it`) |
-| Partition / QOS | `stud` / `stud` |
-| GPU | NVIDIA A100 80GB |
-| Conda env | `cutler` — Python 3.9, CUDA 12.1, PyTorch 2.5.1+cu121 |
-| Detectron2 | 0.6+fd27788pt2.5.0cu121 (miropsota pre-built wheels) |
-| numpy | pinned `<2` (Detectron2 0.6 incompatible with numpy 2.x) |
-
-**Workflow:** edit locally → `git push` → SSH to cluster → `git pull` → `sbatch`
-
-**Detectron2 install note:** Must use miropsota pre-built wheels. Building from source against PyTorch 2.x fails due to removed `torch.cuda.amp` APIs. See `slurm/install_detectron2.sh`.
-
-**⚠ Account discrepancy in SLURM scripts:** `run_multiscale_maskcut.sh` uses account `3355142`; `run_maskcut_baseline.sh` and `run_training.sh` use `3152697`. Verify the correct account and update `#SBATCH --account` and log path prefixes in all scripts before submitting.
+- Cluster: Bocconi HPC (`slogin.hpc.unibocconi.it`), user `3355142`
+- GPU: NVIDIA A100 80GB, partition `stud`, QOS `stud`
+- Conda env: `cutler` — Python 3.9, PyTorch 2.5.1+cu121
+- Detectron2: 0.6 installed from miropsota pre-built wheels (source build fails against PyTorch 2.x)
+- numpy pinned `<2` (Detectron2 0.6 incompatible with numpy 2.x)
 
 ---
 
-## MaskCut Code Versions
+## Workflow
 
-### v1 — IoU-NMS merging
-- Merge: greedy NMS — drop newer mask if IoU > threshold
-- Crop selection: binary skip/keep by coverage ratio
-- Used for: Run 1 (5-class, 2,500 images, 24,771 annotations, job 484052 pseudo-labels + job 486811 training)
-- Preserved as: `multiscale/multiscale_maskcut_legacy.py`
-
-### v2 — Graph-based merging + crop ranking (current, 2026-05-01)
-- Merge: graph-based — connect masks by IoU, containment, or box adjacency; union connected components
-- Crop ranking: score windows by `(1 − coverage_ratio) × (1 + edge_density/128)`, keep top-N
-- Preset system: `--ms-preset small / balanced / mostlite / legacy`
-- Main file: `multiscale/multiscale_maskcut.py`
-- Hybrid snapshot: `multiscale/multiscale_maskcut_hybrid.py`
-
-For full implementation details see `multiscale/MULTISCALE_MASKCUT.md`. For a comparison of all crop proposal strategies see `multiscale/STRATEGY_COMPARISON.md`.
-
----
-
-## Phase Log
-
-### Phase 1: Setup ✓ (2026-04-20)
-- [x] Cloned CutLER as git submodule; set up project structure (CLAUDE.md, .gitignore, branches)
-- [x] Installed `cutler` conda env on cluster using miropsota Detectron2 wheels
-- [x] Confirmed cluster data paths; `DATA_ROOT` set to `${HOME}/data` in all SLURM scripts
-- [x] Downloaded COCO val2017 images and annotations to `~/data/coco/`
-- [x] Downloaded pre-trained CutLER checkpoint and pre-generated MaskCut annotations
-
-### Phase 2: Baseline Reproduction ✓ (2026-04-27)
-- [x] Evaluated pre-trained `cutler_cascade_final.pth` on COCO val2017
-- [x] Results match CutLER paper — reproducibility confirmed (see Results Tracker)
-
-### Phase 3: Multi-Scale MaskCut (in progress)
-- [x] Implemented multi-scale MaskCut with correct crop-from-original projection, CRF filtering, graph-based merge
-- [x] Added DINO feature-contrast heatmap crop proposal mode
-- [x] Added MOST-lite token-cluster crop proposal mode
-- [x] Preset system: `small`, `balanced`, `mostlite`, `legacy`
-- [x] Split output system: `normal`, `raw_multiscale`, `multiscale`, `combined`, `candidate_debug`
-- [x] Single-image local debugging (see `debug/`) confirmed implementation recovers foreground objects the old version missed
-- [x] Generated v1 pseudo-labels on 5-class TinyImageNet (job 484052, 2026-04-28): 2,500 images, 24,771 annotations
-- [x] Generated v2 baseline pseudo-labels on 10-class TinyImageNet (job ?, 2026-05-01): 500 images, 748 annotations
-- [x] Run 1: detector training on v1 multi-scale pseudo-labels (job 486811, 2026-05-01) — near-zero COCO AP (see Training Runs)
-- [x] Added `tools/visualize_pseudo_masks.py`, `tools/train_wrapper.py`, `tools/register_tinyimagenet_pseudo.py`
-- [x] Fix `slurm/run_training.sh` incomplete `SOLVER.` line
-- [ ] Generate v2 multi-scale pseudo-labels: hybrid heatmap + MOST-lite v2 soft on 10-class TinyImageNet
-- [ ] Run baseline detector training on 10-class pseudo-labels
-- [ ] Run multi-scale detector training on 10-class pseudo-labels
-- [ ] Compare APs/APm: baseline vs multi-scale (controlled comparison)
-
-### Phase 4: Analysis & Write-up (upcoming)
-- [ ] Direct pseudo-mask evaluation: Small Recall@0.5 vs COCO GT (see `multiscale/EVALUATION_PROCESS.md`)
-- [ ] Ablation: crop proposal mode, scales, iterations
-- [ ] Visualizations for presentation (overlay grids, area distributions, recall by size)
-- [ ] Final results table and course report
+```
+[Mac — write code with Claude Code]
+        │
+        │  git push origin <branch>
+        ▼
+[GitHub — cutler-multiscale]
+        │
+        │  git pull  (on cluster)
+        ▼
+[HPC cluster — sbatch slurm/<script>.sh]
+```
 
 ---
 
 ## Results Tracker
 
-Canonical BBOX and SEGM results tables live in `README.md`. Update those after each evaluation run.
+### COCO val2017 — Bounding Box (BBOX)
 
-### Pseudo-Label Statistics — v1 code, 5-class TinyImageNet (2026-04-29)
+| Method | AP | AP50 | AP75 | APs | APm | APl |
+|--------|----|------|------|-----|-----|-----|
+| CutLER (paper) | 8.3 | 13.8 | 8.0 | — | — | — |
+| CutLER (ours, reproduced) | 12.33 | 21.98 | 11.90 | 3.66 | 12.72 | 29.60 |
+| Trained on baseline pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on hybrid pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
 
-| Metric | Single-scale | Multi-scale (v1) |
-|--------|-------------|------------------|
-| Total annotations | 3,315 | 24,771 |
-| Masks / image | 1.33 | 9.91 |
-| Mean area | 993.6 | 374.4 |
-| Small (area < 1024) | 1,875 (56.6%) | 23,433 (94.6%) |
-| Medium (1024–9216) | 1,440 (43.4%) | 1,338 (5.4%) |
+### COCO val2017 — Instance Segmentation (SEGM)
 
-Multi-scale v1 generates 7.5× more annotations concentrated in small objects. 9.9 masks/image is likely too many — v2 is more conservative with preset-based filtering.
-
----
-
-## Training Runs
-
-### Run 1 — v1 code, 5-class TinyImageNet (job 486811, 2026-05-01)
-
-- **Model:** Cascade Mask R-CNN R50 FPN, class-agnostic, 160k iterations, batch size 2, 1 GPU
-- **Training data:** 2,500 images (5 TinyImageNet classes), 24,771 v1 multi-scale annotations
-- **Evaluation:** COCO val2017
-
-BBOX:
-| AP | AP50 | AP75 | APs | APm | APl |
-|----|------|------|-----|-----|-----|
-| 0.0005 | 0.0015 | 0.0003 | 0.0009 | 0.0006 | 0.0008 |
-
-SEGM:
-| AP | AP50 | AP75 | APs | APm | APl |
-|----|------|------|-----|-----|-----|
-| 0.0004 | 0.0011 | 0.0002 | 0.0004 | 0.0006 | 0.0002 |
-
-**Why near-zero:** 2,500 training images is ~200× less than original CutLER (1.28M images). The detector does not learn generalizable features. This is expected and does not tell us anything about pseudo-label quality.
-
-**What the valid comparison is:** Baseline vs multi-scale trained under identical conditions — same 10-class dataset, same detector architecture, same evaluation. The only variable is pseudo-label quality.
+| Method | AP | AP50 | AP75 | APs | APm | APl |
+|--------|----|------|------|-----|-----|-----|
+| CutLER (paper) | — | — | — | — | — | — |
+| CutLER (ours, reproduced) | 9.78 | 18.92 | 9.19 | 2.44 | 8.77 | 24.29 |
+| Trained on baseline pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on hybrid pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
 
 ---
 
-## Active Blockers
+## Pseudo-label Statistics (TinyImageNet 10c)
 
-- **Speed regression:** Multi-scale currently runs ~48 s/image on A100 (target: ~6 s/image). Use `slurm/run_speedtest.sh` to profile. Limits scale-up beyond 500 images until resolved. Full TinyImageNet (100k images) feasible once fixed — use `--job-index` to split across jobs.
+| Metric | Baseline | Hybrid |
+|--------|----------|--------|
+| Images | 500 | TBD (pending job 488887) |
+| Total masks | 748 | TBD |
+| Masks / image | 1.5 | TBD |
+| Typical range | mostly 1–3 per image | TBD |
+| Output file | `tinyimagenet_10c_baseline_pseudo.json` | `tinyimagenet_10c_hybrid_pseudo.json` |
 
-### Resolved (for reference)
-- TinyImageNet has extra `images/` subdirectory per class — patched in `multiscale_maskcut.py`
-- SLURM log paths must be absolute — patched in SLURM scripts
-- `dino.py` unconditionally called `torch.hub` for weights — patched to check `os.path.isfile` first
-- Building Detectron2 from source fails against PyTorch 2.x — resolved by using miropsota wheels
-- `slurm/run_training.sh` incomplete `SOLVER.` argument — fixed 2026-05-04
-- Hardcoded `#SBATCH --account` and `/home/<uid>/` paths across SLURM scripts — replaced with portable `${HOME}` refs and `SBATCH_ACCOUNT` instructions, 2026-05-05
+Both files live on the cluster at `~/data/tiny-imagenet-10classes/annotations/` (gitignored — regenerate with `sbatch slurm/run_maskcut_baseline.sh` or `sbatch slurm/run_hybrid_maskcut_tinyimagenet.sh`).
 
 ---
 
-## Document Map
+## Open Questions / Known Limitations
+
+- **10 classes is a small training set** — results are indicative, not statistically robust; absolute AP numbers will be low, but the relative baseline-vs-hybrid delta is what matters.
+- **Speed**: hybrid multi-scale runs ~10× slower than baseline (~48 s/image on A100 vs ~6 s/image); this limits scaling beyond 500 images without splitting across jobs.
+- **We do not implement Level-1 direct pseudo-mask evaluation against COCO GT masks** (Small Recall@0.50 etc.) — that is a separate workstream described in `multiscale/EVALUATION_PROCESS.md` and not part of the current report scope.
+- **MOST-lite v2 soft** is implemented and documented but not yet included in the main comparison; it is available if time permits after the baseline-vs-hybrid run completes.
+- **Self-training is not planned** for this report; we compare single-round pseudo-label quality only.
+
+---
+
+## Key References
 
 | File | Purpose |
 |------|---------|
-| `README.md` | Project overview, results table, and exact `sbatch` commands for all three methods |
-| `PROJECT_NOTES.md` | This file — status, parameters, artifacts, results, audit trail |
-| `PROJECT_OVERVIEW.md` | Plain-English explanation of the full pipeline (for non-experts / course report background) |
-| `multiscale/MULTISCALE_MASKCUT.md` | Full guide to `multiscale_maskcut.py`: code structure, CLI arguments, how to run |
-| `multiscale/STRATEGY_COMPARISON.md` | Detailed comparison of all crop proposal strategies (normal, grid, hybrid, MOST-lite, combined) |
-| `multiscale/EVALUATION_PROCESS.md` | Evaluation methodology: metrics, dataset setup, experiment order, figures for presentation |
-| `presentation/` | Report draft, slide outline, results templates, design decision docs |
-| `slurm/` | All SLURM job scripts |
-| `tools/` | `visualize_pseudo_masks.py`, `train_wrapper.py`, `register_tinyimagenet_pseudo.py` |
-| `experiments/` | `environment.yml`, `rank_small_ap.py` |
-| `debug/` | Single-image debug outputs: contact sheets, mask overlays, candidate JSON records |
-| `CutLER/` | Upstream CutLER submodule (Facebook Research) — do not edit directly |
+| `README.md` | Setup, reproduction commands, end-to-end run instructions |
+| `PROJECT_OVERVIEW.md` | Plain-English pipeline explanation (no prior CV knowledge assumed) |
+| `multiscale/STRATEGY_COMPARISON.md` | Detailed comparison of all crop proposal strategies (normal, hybrid, MOST-lite, combined) |
+| `multiscale/EVALUATION_PROCESS.md` | Full evaluation methodology, metrics, and figures for the report |
+| `multiscale/MULTISCALE_MASKCUT.md` | Code guide and full CLI reference for `multiscale_maskcut.py` |
+| `slurm/README.md` | Complete SLURM script index and submission instructions |
