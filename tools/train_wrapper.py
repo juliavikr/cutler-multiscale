@@ -19,4 +19,7 @@ import register_tinyimagenet_pseudo  # noqa: F401
 # Run the upstream train_net.py as __main__ (runpy prepends its dir to sys.path,
 # so CutLER's local imports like `from config import ...` continue to work).
 _train_net = os.path.abspath(os.path.join(_tools_dir, "../CutLER/cutler/train_net.py"))
+_cutler_dir = os.path.dirname(_train_net)
+if _cutler_dir not in sys.path:
+    sys.path.insert(0, _cutler_dir)
 runpy.run_path(_train_net, run_name="__main__")
