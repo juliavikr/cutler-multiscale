@@ -2,13 +2,15 @@
 
 ## TL;DR
 
-We have reproduced CutLER's published COCO results (AP=12.33, APs=3.66) and generated single-scale baseline pseudo-labels on a 500-image, 10-class TinyImageNet subset (748 masks). The hybrid multi-scale variant is currently generating pseudo-labels (SLURM job 488887, 6–12h ETA). Once that job finishes we train two Cascade Mask R-CNN detectors under identical settings — one on baseline pseudo-labels, one on hybrid — and evaluate both on COCO val2017. The headline question is whether hybrid multi-scale MaskCut improves APs (small-object AP).
+We have reproduced CutLER's published COCO results (AP=12.33, APs=3.66). We are now running two parallel experiment tracks: a **5-class track** (250 images) to get results in time for the presentation on 2026-05-07, and a **10-class track** (500 images) that continues in parallel for the final report. Both tracks compare single-scale baseline MaskCut against hybrid heatmap multi-scale MaskCut end-to-end, training a Cascade Mask R-CNN and evaluating on COCO val2017. The headline metric is APs (small-object AP).
+
+> **Scope reduction — 2026-05-05:** Reduced active experiment to 5-class TinyImageNet (250 images) due to presentation timeline. The 10-class hybrid pseudo-label job (488887) exceeded the available compute window before training could begin. The 10-class plan remains intact below and continues as the report track.
 
 ---
 
 ## Project Goal
 
-We extend CutLER by replacing its single-scale MaskCut pseudo-label generator with a multi-scale variant that runs additional MaskCut passes inside DINO-heatmap-guided crops and merges the results. The hypothesis is that cropping before MaskCut gives more patches-per-object for small objects, improving pseudo-label recall and ultimately APs after detector training. We compare baseline vs. hybrid multi-scale end-to-end on COCO val2017 using a controlled 10-class TinyImageNet training subset.
+We extend CutLER by replacing its single-scale MaskCut pseudo-label generator with a multi-scale variant that runs additional MaskCut passes inside DINO-heatmap-guided crops and merges the results. The hypothesis is that cropping before MaskCut gives more patches-per-object for small objects, improving pseudo-label recall and ultimately APs after detector training. We compare baseline vs. hybrid multi-scale end-to-end on COCO val2017.
 
 ---
 
@@ -23,26 +25,32 @@ We extend CutLER by replacing its single-scale MaskCut pseudo-label generator wi
 ### Phase 2 — Baseline reproduction
 - [x] Pre-trained CutLER eval on COCO val2017 — AP=12.33, APs=3.66 (matches paper)
 
-### Phase 3 — Pseudo-label generation on TinyImageNet 10-class subset
-- [x] TinyImageNet downloaded and restructured (50 images × 10 classes = 500 images total)
-- [x] Single-scale baseline MaskCut → `tinyimagenet_10c_baseline_pseudo.json` (500 imgs, 748 masks)
-- [~] Hybrid multi-scale MaskCut → `tinyimagenet_10c_hybrid_pseudo.json` (job 488887 running, 6–12h ETA)
+---
 
-### Phase 4 — Detector training (pending Phase 3)
-- [ ] Train detector A on baseline pseudo-labels
-- [ ] Train detector B on hybrid pseudo-labels
-- [ ] Both use `cascade_mask_rcnn_R_50_FPN` config, single GPU, MAX_ITER=20000, IMS_PER_BATCH=8, BASE_LR=0.005
+### Track A — 5-class subset (presentation, deadline 2026-05-07)
 
-### Phase 5 — Evaluation on COCO val2017 (pending Phase 4)
-- [ ] Evaluate detector A on COCO val2017 cls_agnostic
-- [ ] Evaluate detector B on COCO val2017 cls_agnostic
-- [ ] Compare APs improvement (the headline metric)
+250 images (5 classes × 50). SLURM scripts updated 2026-05-05.
 
-### Phase 6 — Report and presentation (parallel with Phases 4–5)
-- [ ] Pseudo-mask visualizations (baseline vs. hybrid, 5–10 example images)
-- [ ] Results tables filled with real numbers
-- [ ] Slide deck draft
-- [ ] Written report
+- [ ] Download / prepare `~/data/tiny-imagenet-5classes/` on cluster (5 of the original 10 class folders)
+- [ ] Baseline pseudo-labels → `tinyimagenet_5c_baseline_pseudo.json` (`sbatch slurm/run_maskcut_baseline.sh`, ~30min)
+- [ ] Hybrid pseudo-labels → `tinyimagenet_5c_hybrid_pseudo.json` (`sbatch slurm/run_hybrid_maskcut_tinyimagenet.sh`, ~6h)
+- [ ] Train detector A on baseline: `PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh` (~2–4h)
+- [ ] Train detector B on hybrid: `PSEUDO_LABEL_NAME=hybrid sbatch slurm/run_training.sh` (~2–4h)
+- [ ] Evaluate both on COCO val2017 cls_agnostic, record APs
+- [ ] Pseudo-mask visualizations (5–10 example images, baseline vs. hybrid overlay)
+- [ ] Slide deck with real numbers
+
+### Track B — 10-class subset (report, no hard deadline)
+
+500 images (10 classes × 50). Original plan, continues after presentation.
+
+- [x] TinyImageNet restructured (10 classes, 50 images each = 500 total)
+- [x] Baseline pseudo-labels generated: `tinyimagenet_10c_baseline_pseudo.json` (500 imgs, 748 masks, 2026-05-01)
+- [~] Hybrid pseudo-labels: job 488887 ran on 10-class data; check if output exists on cluster
+- [ ] Once hybrid JSON confirmed: run `PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh` with 10c paths restored
+- [ ] Run `PSEUDO_LABEL_NAME=hybrid sbatch slurm/run_training.sh` with 10c paths
+- [ ] Evaluate both, fill results tables
+- [ ] Written report with full results
 
 ---
 
@@ -50,7 +58,7 @@ We extend CutLER by replacing its single-scale MaskCut pseudo-label generator wi
 
 **Any change to these invalidates comparisons and requires re-running both legs.**
 
-### Shared MaskCut settings
+### Shared MaskCut settings (both tracks)
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
@@ -61,7 +69,6 @@ We extend CutLER by replacing its single-scale MaskCut pseudo-label generator wi
 | `--N` | `3` | max masks per image (full-image pass) |
 | `--fixed_size` | `480` | resize input to 480×480 |
 | `--pretrain_path` | `${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth` | DINO ViT-S/8 weights |
-| `--num-folder-per-job` | `10` | process all 10 class folders in one job |
 | `--job-index` | `0` | single-job run |
 
 ### Hybrid-only additional flags
@@ -73,17 +80,22 @@ We extend CutLER by replacing its single-scale MaskCut pseudo-label generator wi
 
 ### Training settings
 
-| Parameter | Value |
-|-----------|-------|
-| Config | `cascade_mask_rcnn_R_50_FPN` |
-| MAX_ITER | 20000 |
-| IMS_PER_BATCH | 8 |
-| BASE_LR | 0.005 |
-| GPUs | 1 (A100) |
+| Parameter | Track A (5c, presentation) | Track B (10c, report) |
+|-----------|----------------------------|-----------------------|
+| Config | `cascade_mask_rcnn_R_50_FPN` | same |
+| MAX_ITER | 8000 | 20000 |
+| SOLVER.STEPS | `(6000,)` | `(15000,)` |
+| IMS_PER_BATCH | 8 | 8 |
+| BASE_LR | 0.005 | 0.005 |
+| GPUs | 1 (A100) | 1 (A100) |
 
-### 10-class subset
+### 5-class subset (Track A)
 
-`n01443537` (goldfish), `n02123045` (tabby cat), `n02281406` (sulphur butterfly), `n02410509` (bison), `n02906734` (broom), `n03100240` (convertible), `n03444034` (go-kart), `n04067472` (reel), `n04254777` (sock), `n07711569` (mashed potato)
+First 5 of the original 10 classes: `n01443537` (goldfish), `n02123045` (tabby cat), `n02281406` (sulphur butterfly), `n02410509` (bison), `n02906734` (broom)
+
+### 10-class subset (Track B)
+
+All 10 classes: `n01443537` (goldfish), `n02123045` (tabby cat), `n02281406` (sulphur butterfly), `n02410509` (bison), `n02906734` (broom), `n03100240` (convertible), `n03444034` (go-kart), `n04067472` (reel), `n04254777` (sock), `n07711569` (mashed potato)
 
 ---
 
@@ -121,8 +133,10 @@ We extend CutLER by replacing its single-scale MaskCut pseudo-label generator wi
 |--------|----|------|------|-----|-----|-----|
 | CutLER (paper) | 8.3 | 13.8 | 8.0 | — | — | — |
 | CutLER (ours, reproduced) | 12.33 | 21.98 | 11.90 | 3.66 | 12.72 | 29.60 |
-| Trained on baseline pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
-| Trained on hybrid pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on baseline pseudo-labels (5c) | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on hybrid pseudo-labels (5c) | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on baseline pseudo-labels (10c) | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on hybrid pseudo-labels (10c) | TBD | TBD | TBD | TBD | TBD | TBD |
 
 ### COCO val2017 — Instance Segmentation (SEGM)
 
@@ -130,32 +144,45 @@ We extend CutLER by replacing its single-scale MaskCut pseudo-label generator wi
 |--------|----|------|------|-----|-----|-----|
 | CutLER (paper) | — | — | — | — | — | — |
 | CutLER (ours, reproduced) | 9.78 | 18.92 | 9.19 | 2.44 | 8.77 | 24.29 |
-| Trained on baseline pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
-| Trained on hybrid pseudo-labels | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on baseline pseudo-labels (5c) | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on hybrid pseudo-labels (5c) | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on baseline pseudo-labels (10c) | TBD | TBD | TBD | TBD | TBD | TBD |
+| Trained on hybrid pseudo-labels (10c) | TBD | TBD | TBD | TBD | TBD | TBD |
 
 ---
 
-## Pseudo-label Statistics (TinyImageNet 10c)
+## Pseudo-label Statistics
+
+### Track A — 5-class (250 images)
 
 | Metric | Baseline | Hybrid |
 |--------|----------|--------|
-| Images | 500 | TBD (pending job 488887) |
+| Images | TBD | TBD |
+| Total masks | TBD | TBD |
+| Masks / image | TBD | TBD |
+| Output file | `tinyimagenet_5c_baseline_pseudo.json` | `tinyimagenet_5c_hybrid_pseudo.json` |
+| Cluster path | `~/data/tiny-imagenet-5classes/annotations/` | same dir |
+
+### Track B — 10-class (500 images)
+
+| Metric | Baseline | Hybrid |
+|--------|----------|--------|
+| Images | 500 | TBD (check job 488887 output) |
 | Total masks | 748 | TBD |
 | Masks / image | 1.5 | TBD |
 | Typical range | mostly 1–3 per image | TBD |
 | Output file | `tinyimagenet_10c_baseline_pseudo.json` | `tinyimagenet_10c_hybrid_pseudo.json` |
-
-Both files live on the cluster at `~/data/tiny-imagenet-10classes/annotations/` (gitignored — regenerate with `sbatch slurm/run_maskcut_baseline.sh` or `sbatch slurm/run_hybrid_maskcut_tinyimagenet.sh`).
+| Cluster path | `~/data/tiny-imagenet-10classes/annotations/` | same dir |
 
 ---
 
 ## Open Questions / Known Limitations
 
-- **10 classes is a small training set** — results are indicative, not statistically robust; absolute AP numbers will be low, but the relative baseline-vs-hybrid delta is what matters.
-- **Speed**: hybrid multi-scale runs ~10× slower than baseline (~48 s/image on A100 vs ~6 s/image); this limits scaling beyond 500 images without splitting across jobs.
-- **We do not implement Level-1 direct pseudo-mask evaluation against COCO GT masks** (Small Recall@0.50 etc.) — that is a separate workstream described in `multiscale/EVALUATION_PROCESS.md` and not part of the current report scope.
-- **MOST-lite v2 soft** is implemented and documented but not yet included in the main comparison; it is available if time permits after the baseline-vs-hybrid run completes.
-- **Self-training is not planned** for this report; we compare single-round pseudo-label quality only.
+- **5 classes is a very small training set** — absolute AP numbers will be low; the baseline-vs-hybrid delta is what matters, and even that may be noisy at this scale.
+- **Speed**: hybrid multi-scale runs ~90 s/image on A100 vs ~7 s/image for baseline; the 10-class hybrid run (500 images) takes ~12.5h which was the driver for the 5-class pivot.
+- **We do not implement Level-1 direct pseudo-mask evaluation** (Small Recall@0.50 against COCO GT masks) — described in `multiscale/EVALUATION_PROCESS.md` but out of scope for the current timeline.
+- **MOST-lite v2 soft** is implemented but not included in the main comparison; it is available as a follow-on experiment if time permits.
+- **Self-training is not planned** — we compare single-round pseudo-label quality only.
 
 ---
 
@@ -165,7 +192,7 @@ Both files live on the cluster at `~/data/tiny-imagenet-10classes/annotations/` 
 |------|---------|
 | `README.md` | Setup, reproduction commands, end-to-end run instructions |
 | `PROJECT_OVERVIEW.md` | Plain-English pipeline explanation (no prior CV knowledge assumed) |
-| `multiscale/STRATEGY_COMPARISON.md` | Detailed comparison of all crop proposal strategies (normal, hybrid, MOST-lite, combined) |
+| `multiscale/STRATEGY_COMPARISON.md` | Detailed comparison of all crop proposal strategies |
 | `multiscale/EVALUATION_PROCESS.md` | Full evaluation methodology, metrics, and figures for the report |
 | `multiscale/MULTISCALE_MASKCUT.md` | Code guide and full CLI reference for `multiscale_maskcut.py` |
 | `slurm/README.md` | Complete SLURM script index and submission instructions |

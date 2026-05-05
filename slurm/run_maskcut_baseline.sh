@@ -10,14 +10,16 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=04:00:00
+#SBATCH --time=02:00:00
 #SBATCH --output=logs/maskcut_baseline_%j.out
 #SBATCH --error=logs/maskcut_baseline_%j.err
 
 # =============================================================================
-# Purpose: Baseline (single-scale) MaskCut on 10-class TinyImageNet subset.
+# Purpose: Baseline (single-scale) MaskCut on 5-class TinyImageNet subset.
+#          250 images total (5 classes × 50 images). Reduced from 10-class for
+#          presentation timeline. 10-class run continues separately for the report.
 #
-# Locked parameters — MUST match slurm/run_multiscale_maskcut.sh
+# Locked parameters — MUST match slurm/run_hybrid_maskcut_tinyimagenet.sh
 # for the comparison to be valid. See PROJECT_NOTES.md "Locked Experiment
 # Parameters" before changing anything below.
 #
@@ -28,6 +30,7 @@
 #   --N         3         max masks per image
 #   --fixed_size 480      resize input to 480×480 square
 #   --pretrain_path       dino_deitsmall8_pretrain.pth
+#   Time estimate: 250 images × 7s/image ≈ 30min; 2h for safety.
 # =============================================================================
 
 set -euo pipefail
@@ -41,10 +44,10 @@ conda activate cutler
 REPO_ROOT="${HOME}/cutler-multiscale"
 cd "${REPO_ROOT}/CutLER/maskcut"
 
-ANNO_DIR="${HOME}/data/tiny-imagenet-10classes/annotations"
+ANNO_DIR="${HOME}/data/tiny-imagenet-5classes/annotations"
 mkdir -p "${ANNO_DIR}"
 
-echo "=== Running baseline (single-scale) MaskCut on 10-class TinyImageNet ==="
+echo "=== Running baseline (single-scale) MaskCut on 5-class TinyImageNet ==="
 python maskcut.py \
     --vit-arch small \
     --vit-feat k \
@@ -53,8 +56,8 @@ python maskcut.py \
     --N 3 \
     --fixed_size 480 \
     --pretrain_path "${DATA_ROOT:-${HOME}/data}/weights/dino_deitsmall8_pretrain.pth" \
-    --dataset-path "${HOME}/data/tiny-imagenet-10classes/train_flat/" \
-    --num-folder-per-job 10 \
+    --dataset-path "${HOME}/data/tiny-imagenet-5classes/train/" \
+    --num-folder-per-job 5 \
     --job-index 0 \
     --out-dir "${ANNO_DIR}"
 
@@ -62,7 +65,7 @@ python maskcut.py \
 # With num-folder-per-job == len(dataset folders), it writes the no-suffix form:
 #   imagenet_train_fixsize480_tau0.15_N3.json
 GENERATED="${ANNO_DIR}/imagenet_train_fixsize480_tau0.15_N3.json"
-FINAL="${ANNO_DIR}/tinyimagenet_10c_baseline_pseudo.json"
+FINAL="${ANNO_DIR}/tinyimagenet_5c_baseline_pseudo.json"
 mv "${GENERATED}" "${FINAL}"
 
 echo "=== Done ==="
