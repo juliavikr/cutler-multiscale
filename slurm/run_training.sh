@@ -2,8 +2,8 @@
 # Train CutLER Cascade Mask R-CNN on TinyImageNet pseudo-labels.
 #
 # Usage:
-#   PSEUDO_LABEL_NAME=baseline    sbatch slurm/run_training.sh
-#   PSEUDO_LABEL_NAME=multiscale  sbatch slurm/run_training.sh
+#   PSEUDO_LABEL_NAME=baseline  sbatch slurm/run_training.sh
+#   PSEUDO_LABEL_NAME=hybrid    sbatch slurm/run_training.sh
 #
 # PSEUDO_LABEL_NAME selects the annotation JSON and names the output directory.
 # Tip: pass --job-name to sbatch for descriptive log filenames, e.g.:
@@ -12,7 +12,8 @@
 # (SLURM does not expand shell variables in #SBATCH directives; %x = job name, %j = job ID.)
 
 #SBATCH --job-name=cutler-train
-#SBATCH --account=3152697
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -21,8 +22,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=48G
 #SBATCH --time=20:00:00
-#SBATCH --output=/home/3152697/cutler-multiscale/logs/training_%x_%j.out
-#SBATCH --error=/home/3152697/cutler-multiscale/logs/training_%x_%j.err
+#SBATCH --output=logs/training_%x_%j.out
+#SBATCH --error=logs/training_%x_%j.err
 
 set -euo pipefail
 
@@ -40,17 +41,17 @@ conda activate cutler
 
 # --- Paths ---
 export DETECTRON2_DATASETS="${HOME}/data"
-ANNO_DIR="${HOME}/data/tiny-imagenet-10classes/annotations"
+ANNO_DIR="${HOME}/data/tiny-imagenet-5classes/annotations"
 
 case "${PSEUDO_LABEL_NAME}" in
     baseline)
-        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_baseline_pseudo.json"
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_5c_baseline_pseudo.json"
         ;;
-    multiscale)
-        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_multiscale_pseudo.json"
+    hybrid)
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_5c_hybrid_pseudo.json"
         ;;
     *)
-        echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline' or 'multiscale'."
+        echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline' or 'hybrid'."
         exit 1
         ;;
 esac
@@ -73,8 +74,8 @@ python "${HOME}/cutler-multiscale/tools/train_wrapper.py" \
     DATASETS.TRAIN "(\"tinyimagenet_${PSEUDO_LABEL_NAME}_pseudo\",)" \
     SOLVER.IMS_PER_BATCH 8 \
     SOLVER.BASE_LR 0.005 \
-    SOLVER.MAX_ITER 20000 \
-    SOLVER.STEPS "(15000,)" \
+    SOLVER.MAX_ITER 8000 \
+    SOLVER.STEPS "(6000,)" \
     SOLVER.WARMUP_ITERS 1000 \
     DATALOADER.NUM_WORKERS 2 \
     OUTPUT_DIR "${OUTPUT_DIR}"

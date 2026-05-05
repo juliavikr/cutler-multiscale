@@ -106,7 +106,7 @@ The crop masks are then projected back to the full image and merged.
 This is the older high-recall behavior preserved in:
 
 ```text
-multiscale/multiscale_maskcut copy.py
+multiscale/multiscale_maskcut_legacy.py
 ```
 
 and conceptually available through:

@@ -1,7 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=cutler-download-tinyimagenet
-#SBATCH --account=3355142
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1

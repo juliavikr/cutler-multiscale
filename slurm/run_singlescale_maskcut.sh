@@ -3,15 +3,16 @@
 #SBATCH --job-name=cutler-ss-maskcut
 #SBATCH --partition=stud
 #SBATCH --qos=stud
-#SBATCH --account=3152697
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=24:00:00
-#SBATCH --output=/home/3152697/cutler-multiscale/logs/ss_maskcut_%j.out
-#SBATCH --error=/home/3152697/cutler-multiscale/logs/ss_maskcut_%j.err
+#SBATCH --output=logs/ss_maskcut_%j.out
+#SBATCH --error=logs/ss_maskcut_%j.err
 
 set -euo pipefail
 
@@ -20,7 +21,7 @@ source /software/miniconda3/etc/profile.d/conda.sh
 conda activate cutler
 
 # --- Paths (edit before submitting) ---
-REPO_ROOT="/home/3152697/cutler-multiscale"
+REPO_ROOT="${HOME}/cutler-multiscale"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
 DATASET_PATH="${DATA_ROOT}/tiny-imagenet-5/train"
 DATASET_PATH_WITH_IMAGES=1         # 200 class subdirectories

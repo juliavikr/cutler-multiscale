@@ -1,7 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=cutler-ms-maskcut
-#SBATCH --account=3355142
+# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+#       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -21,7 +22,7 @@ conda activate cutler
 # --- Paths (edit before submitting) ---
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
-DATASET_PATH="${DATASET_PATH:-${DATA_ROOT}/tiny-imagenet-200/train}"
+DATASET_PATH="${DATASET_PATH:-${DATA_ROOT}/tiny-imagenet-10classes/train}"
 OUT_DIR="${OUT_DIR:-${REPO_ROOT}/pseudo_masks/tiny_imagenet}"
 DINO_WEIGHTS="${DINO_WEIGHTS:-${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth}"
 MASKCUT_SCRIPT="${MASKCUT_SCRIPT:-multiscale/multiscale_maskcut.py}"

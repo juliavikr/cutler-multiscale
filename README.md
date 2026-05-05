@@ -1,7 +1,66 @@
 # cutler-multiscale
 Improving small-object detection in CutLER via Multi-Scale Pseudo-Label Generation
 
-Custom multi-scale pseudo-label generation code lives in [`multiscale/`](/mnt/c/Users/Luiz%20Venosa/Documents/Bocconi/Master/2nd%20Semester/Computer%20VIsion/project/cutler-multiscale/multiscale), not inside the upstream `CutLER/` submodule.
+Custom multi-scale pseudo-label generation code lives in [`multiscale/`](./multiscale/), not inside the upstream `CutLER/` submodule.
+
+## Setup & Reproduction
+
+### Prerequisites
+
+- Python 3.9, CUDA 12.1
+- Full package list: [`experiments/environment.yml`](./experiments/environment.yml)
+- DINO ViT-S/8 pretrained weights (downloaded via `slurm/download_checkpoint.sh`)
+- COCO val2017 images and annotations (downloaded via `slurm/download_data.sh`)
+
+All heavy computation runs on the **Bocconi HPC cluster** (A100 80GB). Do not run training or MaskCut locally.
+
+### Environment
+
+```bash
+# 1. Clone with submodule
+git clone --recurse-submodules https://github.com/juliavikr/cutler-multiscale
+cd cutler-multiscale
+
+# 2. Create conda environment
+conda env create -f experiments/environment.yml
+conda activate cutler
+
+# 3. Install Detectron2 (must use miropsota pre-built wheels — source build fails against PyTorch 2.x)
+bash slurm/install_detectron2.sh
+```
+
+### Data and Weights (run on cluster)
+
+```bash
+bash slurm/download_checkpoint.sh   # CutLER cascade checkpoint + pre-generated MaskCut annotations → ~/cutler-multiscale/checkpoints/
+bash slurm/download_data.sh         # COCO val2017 → ~/data/coco/
+bash slurm/download_tinyimagenet.sh # TinyImageNet 10-class subset → ~/data/tiny-imagenet-10classes/
+```
+
+DINO ViT-S/8 weights (`dino_deitsmall8_pretrain.pth`) must be downloaded separately from the [DINO release](https://github.com/facebookresearch/dino) and placed at `~/data/weights/dino_deitsmall8_pretrain.pth`.
+
+### Cluster Paths
+
+| Variable | Value |
+|----------|-------|
+| `PROJECT_ROOT` | `~/cutler-multiscale` |
+| `DATA_ROOT` | `~/data` |
+
+All SLURM scripts use `DATA_ROOT` as an environment variable. Override if your paths differ.
+
+### End-to-End Reproduction
+
+```
+1. Clone + env setup (above)
+2. Download data and weights (above)
+3. Generate pseudo-labels:  sbatch slurm/run_maskcut_baseline.sh
+4. Train detector:          PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh
+5. Evaluate:                sbatch slurm/run_eval.sh
+```
+
+See **How To Run The Three Methods** below for the full multi-scale experiment commands. See [`slurm/README.md`](./slurm/README.md) for a complete script index.
+
+---
 
 ## Current Experiment Focus
 
@@ -51,7 +110,7 @@ On the cluster:
 ```bash
 DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
 OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
-DINO_WEIGHTS="${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+DINO_WEIGHTS="${HOME}/data/weights/dino_deitsmall8_pretrain.pth" \
 TAU=0.15 \
 N_MASKS=3 \
 FIXED_SIZE=480 \
@@ -74,7 +133,7 @@ On the cluster:
 ```bash
 DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
 OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
-DINO_WEIGHTS="${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+DINO_WEIGHTS="${HOME}/data/weights/dino_deitsmall8_pretrain.pth" \
 TAU=0.15 \
 N_MASKS=3 \
 FIXED_SIZE=480 \

@@ -230,7 +230,7 @@ sbatch slurm/run_maskcut_baseline.sh
 ```bash
 DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
 OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
-DINO_WEIGHTS="${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+DINO_WEIGHTS="${HOME}/data/weights/dino_deitsmall8_pretrain.pth" \
 TAU=0.15 \
 N_MASKS=3 \
 FIXED_SIZE=480 \
@@ -245,7 +245,7 @@ sbatch slurm/run_multiscale_maskcut.sh
 ```bash
 DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
 OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
-DINO_WEIGHTS="${HOME}/cutler-multiscale/checkpoints/dino_deitsmall8_300ep_pretrain.pth" \
+DINO_WEIGHTS="${HOME}/data/weights/dino_deitsmall8_pretrain.pth" \
 TAU=0.15 \
 N_MASKS=3 \
 FIXED_SIZE=480 \
