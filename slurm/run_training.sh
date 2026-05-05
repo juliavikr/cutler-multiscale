@@ -41,14 +41,14 @@ conda activate cutler
 
 # --- Paths ---
 export DETECTRON2_DATASETS="${HOME}/data"
-ANNO_DIR="${HOME}/data/tiny-imagenet-5classes/annotations"
+ANNO_DIR="${HOME}/data/tiny-imagenet-10classes/annotations"
 
 case "${PSEUDO_LABEL_NAME}" in
     baseline)
-        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_5c_baseline_pseudo.json"
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_baseline_pseudo.json"
         ;;
     hybrid)
-        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_5c_hybrid_pseudo.json"
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_multiscale_pseudo.json"
         ;;
     *)
         echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline' or 'hybrid'."
