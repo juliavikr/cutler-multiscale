@@ -49,10 +49,8 @@ python multiscale/multiscale_maskcut.py \
     --multi-crop \
     --ms-preset "${PRESET}" \
     --crop-batch-size 8 \
-    --two-stage-crop \
     --small-first \
-    --heatmap-top-k 4 \
-    --crop-N 1
+    --heatmap-top-k 4
 
 # Rename to canonical output name.
 # The preset-based filename includes the preset tag; find it dynamically.

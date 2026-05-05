@@ -5,7 +5,7 @@ _ANNO_DIR = os.path.expanduser(
     "~/data/tiny-imagenet-10classes/annotations"
 )
 _IMAGE_ROOT = os.path.expanduser(
-    "~/data/tiny-imagenet-10classes/train"
+    "~/data/tiny-imagenet-10classes/train_flat"
 )
 
 register_coco_instances(
@@ -16,8 +16,8 @@ register_coco_instances(
 )
 
 register_coco_instances(
-    "tinyimagenet_hybrid_pseudo",
+    "tinyimagenet_multiscale_pseudo",
     {},
-    os.path.join(_ANNO_DIR, "tinyimagenet_10c_hybrid_pseudo.json"),
+    os.path.join(_ANNO_DIR, "tinyimagenet_10c_multiscale_pseudo.json"),
     _IMAGE_ROOT,
 )
