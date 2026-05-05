@@ -47,6 +47,7 @@ python multiscale/multiscale_maskcut.py \
     --multi-crop \
     --ms-preset "${PRESET}" \
     --crop-batch-size 8 \
+    --two-stage-crop \
     --small-first \
     --heatmap-top-k 4
 
