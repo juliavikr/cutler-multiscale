@@ -199,8 +199,9 @@ By running at finer scales, we recover small objects that were previously invisi
 
 | File | What it is |
 |------|-----------|
-| `README.md` | Short project description and results table — the public face of the repo |
-| `PROJECT_NOTES.md` | Running log: phase status, what worked, what broke, all results |
+| `README.md` | Setup instructions, reproduction commands, and results tables — the public face of the repo |
+| `PROJECT_NOTES.md` | Running log: phase status, locked parameters, generated artifacts, training records, active blockers |
+| `PROJECT_OVERVIEW.md` | This file — plain-English pipeline explanation for non-experts |
 | `CLAUDE.md` | Instructions for Claude Code (the AI coding assistant used to write code) |
 | `LICENSE` | MIT open-source license |
 | `.gitignore` | Tells git which files NOT to track (large data files, model weights, logs) |
@@ -245,58 +246,21 @@ CutLER/
 
 ```
 multiscale/
-├── multiscale_maskcut.py    # The full multi-scale MaskCut implementation
-└── MULTISCALE_MASKCUT.md    # Technical documentation for the script
+├── multiscale_maskcut.py        # Main implementation (v2, current)
+├── multiscale_maskcut_hybrid.py # Heatmap-only snapshot (ablation reference)
+├── multiscale_maskcut_legacy.py # v1 IoU-NMS snapshot (for reference)
+├── MULTISCALE_MASKCUT.md        # Code guide and full CLI reference
+├── STRATEGY_COMPARISON.md       # Comparison of all crop proposal strategies
+└── EVALUATION_PROCESS.md        # Evaluation methodology and metrics
 ```
 
-**`multiscale_maskcut.py`** — This is the heart of our contribution. Key functions:
-
-| Function | What it does |
-|----------|-------------|
-| `get_affinity_matrix()` | Builds the patch similarity graph from DINO features |
-| `second_smallest_eigenvector()` | Runs spectral clustering (the math core of MaskCut) |
-| `maskcut_single()` | Runs MaskCut on one image/crop, returns up to N masks |
-| `get_crop_windows()` | Generates the sliding window grid at each scale |
-| `filter_and_refine_masks()` | CRF refinement + quality filtering (rejects bad masks) |
-| `merge_masks()` | NMS-style deduplication across all scales/crops |
-| `maskcut_multicrop()` | Orchestrates everything for a single image |
-| `save_to_coco_format()` | Converts masks to COCO JSON format for training |
-| `main()` | CLI entry point: loops over a dataset, saves JSON output |
-
-**Key command-line arguments you might tune:**
-
-| Argument | Default | Meaning |
-|----------|---------|---------|
-| `--crop-scales` | `1.0,0.75,0.5` | Which zoom levels to use |
-| `--crop-overlap` | `0.3` | Fraction of overlap between adjacent crops |
-| `--merge-iou-thresh` | `0.5` | IoU above which two masks are considered duplicates |
-| `--tau` | `0.2` | Sensitivity for the affinity graph |
-| `--N` | `3` | Max masks per image/crop |
-| `--small-first` | flag | Prefer keeping small masks when deduplicating |
+**`multiscale_maskcut.py`** — The heart of our contribution. It extends MaskCut by running crop-level MaskCut passes guided by DINO feature heatmaps or token clusters, then merging the results with graph-based deduplication. See `multiscale/MULTISCALE_MASKCUT.md` for the full code guide and CLI reference.
 
 ---
 
 ### `slurm/` — HPC Job Scripts
 
-All heavy computation runs on the Bocconi University HPC cluster via SLURM — a job scheduler that queues GPU jobs. These shell scripts are the interface between our code and the cluster.
-
-| Script | Purpose | GPU time |
-|--------|---------|----------|
-| `run_eval.sh` | Evaluate pre-trained CutLER on COCO val2017 | ~2 hours |
-| `run_maskcut.sh` | Generate pseudo-masks with original MaskCut | ~8 hours |
-| `run_multiscale_maskcut.sh` | Generate pseudo-masks with our extension | ~16+ hours |
-| `run_training.sh` | Train the Mask R-CNN detector | ~24 hours |
-| `install_detectron2.sh` | One-time cluster setup: install Detectron2 | N/A |
-| `download_checkpoint.sh` | Download pre-trained CutLER model weights | N/A |
-| `download_data.sh` | Download COCO val2017 images and annotations | N/A |
-| `fix_pillow.sh` | Fix a Pillow version conflict in the environment | N/A |
-
-**How to submit a job:**
-```bash
-sbatch slurm/run_eval.sh        # submit to queue
-squeue -u 3355142               # check status
-tail -f logs/eval_<jobid>.out   # watch live output
-```
+All heavy computation runs on the Bocconi University HPC cluster via SLURM — a job scheduler that queues GPU jobs. These shell scripts are the interface between our code and the cluster. See `slurm/README.md` for the full script index and submission instructions.
 
 ---
 
@@ -311,9 +275,7 @@ tail -f logs/eval_<jobid>.out   # watch live output
 
 ### `tools/` — Utility Scripts
 
-| File | What it is |
-|------|-----------|
-| `make_cls_agnostic_coco.py` | Converts a standard COCO annotation JSON to class-agnostic format (replaces all category IDs with a single "object" category). Required before evaluating a class-agnostic detector on COCO. |
+Utility scripts for visualization, dataset registration, and training orchestration. See `tools/README.md` for usage and CLI examples for each script.
 
 ---
 
@@ -323,50 +285,7 @@ SLURM writes stdout and stderr from cluster jobs here. The directory is tracked 
 
 ---
 
-## 8. Project Status (as of 2026-05-04)
-
-| Phase | Status | Notes |
-|-------|--------|-------|
-| **Phase 1: Setup** | Done | Conda env, SLURM scripts, cluster paths, data downloaded |
-| **Phase 2: Baseline** | Done | CutLER reproduced — AP=12.33, APs=3.66 on COCO val2017 |
-| **Phase 3: Multi-Scale** | In progress | Baseline pseudo-labels exist (500 images, 748 annotations, 2026-05-01); multi-scale pseudo-labels (hybrid + MOST-lite v2 soft) pending generation with v2 code |
-| **Phase 4: Analysis** | Upcoming | Ablation studies, visualization, course report |
-
-The immediate next steps are to generate multi-scale pseudo-labels with `run_multiscale_maskcut.sh`, then run the controlled comparison: baseline vs. multi-scale detector trained and evaluated on COCO val2017. See `PROJECT_NOTES.md` for the full phase log and active blockers.
-
----
-
-## 9. Development Workflow
-
-Because training requires an A100 GPU (not available on a laptop), all heavy computation runs remotely.
-
-```
-1. Write / edit code here on Mac using Claude Code
-        │
-        ▼
-2. git push origin <branch>     (send to GitHub)
-        │
-        ▼
-3. SSH into cluster:  ssh 3355142@slogin.hpc.unibocconi.it
-        │
-        ▼
-4. git pull                     (fetch latest code)
-        │
-        ▼
-5. sbatch slurm/run_*.sh        (submit GPU job to queue)
-        │
-        ▼
-6. squeue -u 3355142            (monitor job status)
-        │
-        ▼
-7. Fetch results/logs back to Mac for analysis
-```
-
-The cluster uses **SLURM** (Simple Linux Utility for Resource Management) — a standard HPC job scheduler. You don't run code directly on the GPU machine; you submit a script to a queue and SLURM runs it when a GPU is free.
-
----
-
-## 10. Glossary
+## 8. Glossary
 
 | Term | Plain-English Definition |
 |------|--------------------------|

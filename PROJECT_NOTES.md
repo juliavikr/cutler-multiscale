@@ -7,11 +7,10 @@
 Baseline pseudo-labels exist (500 images, 748 annotations, 2026-05-01). Multi-scale pseudo-labels (hybrid heatmap, MOST-lite v2 soft) are **pending** generation with the v2 code. A first detector training run (v1 code, 5-class subset) produced near-zero COCO AP as expected given the tiny training set. The controlled comparison — baseline vs multi-scale, same 10-class dataset, same detector — has not yet been run.
 
 **Immediate next steps:**
-1. Fix incomplete `SOLVER.` line in `slurm/run_training.sh` before next training run
-2. Generate v2 multi-scale pseudo-labels: `sbatch slurm/run_multiscale_maskcut.sh` (see `README.md` for env-var invocations)
-3. Run baseline detector training: `PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh`
-4. Run multi-scale detector training: `PSEUDO_LABEL_NAME=multiscale sbatch slurm/run_training.sh`
-5. Evaluate both on COCO val2017, compare APs/APm
+1. Generate v2 multi-scale pseudo-labels: `sbatch slurm/run_multiscale_maskcut.sh` (see `README.md` for env-var invocations)
+2. Run baseline detector training: `PSEUDO_LABEL_NAME=baseline sbatch slurm/run_training.sh`
+3. Run multi-scale detector training: `PSEUDO_LABEL_NAME=multiscale sbatch slurm/run_training.sh`
+4. Evaluate both on COCO val2017, compare APs/APm
 
 ---
 
@@ -129,7 +128,7 @@ For full implementation details see `multiscale/MULTISCALE_MASKCUT.md`. For a co
 - [x] Generated v2 baseline pseudo-labels on 10-class TinyImageNet (job ?, 2026-05-01): 500 images, 748 annotations
 - [x] Run 1: detector training on v1 multi-scale pseudo-labels (job 486811, 2026-05-01) — near-zero COCO AP (see Training Runs)
 - [x] Added `tools/visualize_pseudo_masks.py`, `tools/train_wrapper.py`, `tools/register_tinyimagenet_pseudo.py`
-- [ ] **Fix `slurm/run_training.sh` incomplete `SOLVER.` line**
+- [x] Fix `slurm/run_training.sh` incomplete `SOLVER.` line
 - [ ] Generate v2 multi-scale pseudo-labels: hybrid heatmap + MOST-lite v2 soft on 10-class TinyImageNet
 - [ ] Run baseline detector training on 10-class pseudo-labels
 - [ ] Run multi-scale detector training on 10-class pseudo-labels
@@ -145,25 +144,7 @@ For full implementation details see `multiscale/MULTISCALE_MASKCUT.md`. For a co
 
 ## Results Tracker
 
-All evaluations on **COCO val2017**, class-agnostic, fully unsupervised. The main controlled comparison (rows 3–4) is still pending.
-
-### Bounding Box Detection (BBOX)
-
-| Method | AP | AP50 | AP75 | APs | APm | APl | Notes |
-|--------|----|------|------|-----|-----|-----|-------|
-| CutLER (paper) | 8.3 | 13.8 | 8.0 | — | — | — | reported in paper |
-| CutLER (ours, reproduced) | **12.33** | **21.98** | **11.90** | **3.66** | **12.72** | **29.60** | `cutler_cascade_final.pth`, 2026-04-27 |
-| Baseline trained (10-class) | — | — | — | — | — | — | training pending |
-| Hybrid multiscale trained (10-class) | — | — | — | — | — | — | pseudo-labels pending |
-
-### Instance Segmentation (SEGM)
-
-| Method | AP | AP50 | AP75 | APs | APm | APl | Notes |
-|--------|----|------|------|-----|-----|-----|-------|
-| CutLER (paper) | — | — | — | — | — | — | not reported separately |
-| CutLER (ours, reproduced) | **9.78** | **18.92** | **9.19** | **2.44** | **8.77** | **24.29** | `cutler_cascade_final.pth`, 2026-04-27 |
-| Baseline trained (10-class) | — | — | — | — | — | — | training pending |
-| Hybrid multiscale trained (10-class) | — | — | — | — | — | — | pseudo-labels pending |
+Canonical BBOX and SEGM results tables live in `README.md`. Update those after each evaluation run.
 
 ### Pseudo-Label Statistics — v1 code, 5-class TinyImageNet (2026-04-29)
 
@@ -205,8 +186,6 @@ SEGM:
 
 ## Active Blockers
 
-- **`slurm/run_training.sh` line 74:** `SOLVER.` is an incomplete argument with no value. Training will fail at submission. Needs to be completed before the next run.
-- **SLURM account inconsistency:** `run_multiscale_maskcut.sh` has `#SBATCH --account=3355142`; `run_maskcut_baseline.sh` and `run_training.sh` have `#SBATCH --account=3152697`. Log path prefixes also differ. Align all scripts to the submitting user's account before running.
 - **Speed regression:** Multi-scale currently runs ~48 s/image on A100 (target: ~6 s/image). Use `slurm/run_speedtest.sh` to profile. Limits scale-up beyond 500 images until resolved. Full TinyImageNet (100k images) feasible once fixed — use `--job-index` to split across jobs.
 
 ### Resolved (for reference)
@@ -214,6 +193,8 @@ SEGM:
 - SLURM log paths must be absolute — patched in SLURM scripts
 - `dino.py` unconditionally called `torch.hub` for weights — patched to check `os.path.isfile` first
 - Building Detectron2 from source fails against PyTorch 2.x — resolved by using miropsota wheels
+- `slurm/run_training.sh` incomplete `SOLVER.` argument — fixed 2026-05-04
+- Hardcoded `#SBATCH --account` and `/home/<uid>/` paths across SLURM scripts — replaced with portable `${HOME}` refs and `SBATCH_ACCOUNT` instructions, 2026-05-05
 
 ---
 

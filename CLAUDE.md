@@ -117,36 +117,6 @@ conda activate cutler
 3. **Detector Training** — train a Mask R-CNN on the pseudo-labeled dataset
 4. **Self-Training** — iterative refinement with model-predicted masks as new pseudo-labels
 
-## Multi-Scale Extension Plan
-
-- Build an image pyramid (scales: 0.5×, 1×, 1.5×, 2×)
-- Run MaskCut independently at each scale
-- Back-project proposals to original image coordinates
-- Merge via Soft-NMS / WBF, weighting by saliency score
-- Goal: recover small objects missed at the native 1× scale
-
-## Running Jobs on the Cluster
-
-```bash
-# After ssh + git pull:
-cd cutler-multiscale
-
-# Pseudo-label generation (MaskCut)
-sbatch slurm/run_maskcut.sh
-
-# Detector training (single A100)
-sbatch slurm/run_training.sh
-
-# COCO evaluation
-sbatch slurm/run_eval.sh
-
-# Monitor jobs
-squeue -u 3355142
-
-# Tail logs
-tail -f logs/maskcut_<jobid>.out
-```
-
 ## Notes for Claude
 
 - `CutLER/` is a git submodule; do not commit changes inside it unless intentional
