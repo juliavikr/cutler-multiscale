@@ -34,7 +34,22 @@ source /software/miniconda3/etc/profile.d/conda.sh
 eval "$(conda shell.bash hook)"
 conda activate cutler
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -z "${REPO_ROOT:-}" ]]; then
+    SEARCH_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
+    while [[ "${SEARCH_DIR}" != "/" ]]; do
+        if [[ -f "${SEARCH_DIR}/tools/train_wrapper_luiz.py" && -d "${SEARCH_DIR}/CutLER/cutler" ]]; then
+            REPO_ROOT="${SEARCH_DIR}"
+            break
+        fi
+        SEARCH_DIR="$(dirname "${SEARCH_DIR}")"
+    done
+fi
+
+if [[ -z "${REPO_ROOT:-}" ]]; then
+    echo "ERROR: Could not find repo root. Submit from the repo or pass REPO_ROOT=/path/to/cutler-multiscale."
+    exit 1
+fi
+
 DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
 export DATA_ROOT
 export DETECTRON2_DATASETS="${DATA_ROOT}"
