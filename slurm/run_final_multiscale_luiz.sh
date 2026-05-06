@@ -23,6 +23,14 @@ source /software/miniconda3/etc/profile.d/conda.sh
 eval "$(conda shell.bash hook)"
 conda activate cutler
 
+if ! python - <<'PY'
+import pydensecrf.densecrf  # noqa: F401
+PY
+then
+    echo "pydensecrf not found in the active conda env; installing it now."
+    python -m pip install --no-cache-dir "cython<3" git+https://github.com/lucasb-eyer/pydensecrf.git
+fi
+
 if [[ -z "${REPO_ROOT:-}" ]]; then
     SEARCH_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
     while [[ "${SEARCH_DIR}" != "/" ]]; do
