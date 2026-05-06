@@ -3,6 +3,7 @@
 #SBATCH --job-name=cutler-eval
 # TODO: set your SLURM account â€” export SBATCH_ACCOUNT=<your_number>
 #       or pass --account=<your_number> to sbatch at submission time.
+#SBATCH --account=3152697
 #SBATCH --partition=stud
 #SBATCH --qos=stud
 #SBATCH --nodes=1
@@ -11,8 +12,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
-#SBATCH --output=logs/eval_%j.out
-#SBATCH --error=logs/eval_%j.err
+#SBATCH --output=/home/3152697/cutler-multiscale/logs/eval_%j.out
+#SBATCH --error=/home/3152697/cutler-multiscale/logs/eval_%j.err
 
 set -euo pipefail
 
