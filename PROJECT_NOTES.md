@@ -95,6 +95,7 @@ We extended CutLER's MaskCut with a hybrid heatmap-guided multi-scale strategy. 
 | Pre-trained CutLER (ours) | 12.33 | 21.98 | 11.90 | 3.66 | 12.72 | 29.60 | cutler_cascade_final.pth, 2026-04-27 |
 | Trained on baseline pseudo-labels | 2.22 | 5.75 | 1.37 | 1.40 | 2.72 | 4.00 | 500 imgs single-scale, 20K iters, Luiz 2026-05-06 |
 | Trained on hybrid pseudo-labels | 0.11 | 0.27 | 0.08 | 0.18 | 0.09 | 0.04 | 500 imgs multi-scale, 20K iters, Julia 2026-05-06 |
+| Trained on combined pseudo-labels | 3.07 | 6.89 | 2.20 | 1.20 | 4.19 | 4.87 | 500 imgs baseline+multiscale merged, 20K iters, Julia 2026-05-06 |
 
 ### COCO val2017 — Instance Segmentation (SEGM)
 
@@ -103,6 +104,7 @@ We extended CutLER's MaskCut with a hybrid heatmap-guided multi-scale strategy. 
 | Pre-trained CutLER (ours) | 9.78 | 18.92 | 9.19 | 2.44 | 8.77 | 24.29 |
 | Trained on baseline pseudo-labels | 0.75 | 1.43 | 0.64 | 0.76 | 1.59 | 0.74 |
 | Trained on hybrid pseudo-labels | 0.08 | 0.15 | 0.10 | 0.10 | 0.02 | 0.00 |
+| Trained on combined pseudo-labels | 1.24 | 2.03 | 1.15 | 0.90 | 1.63 | 0.96 |
 
 ### Recall Comparison (Small Object Detection)
 
@@ -110,6 +112,7 @@ We extended CutLER's MaskCut with a hybrid heatmap-guided multi-scale strategy. 
 |-------|----------|-----------|----------|
 | Trained on baseline pseudo-labels | 0.040 | 0.114 | 0.020 |
 | Trained on hybrid pseudo-labels | 0.078 | 0.013 | 0.000 |
+| Trained on combined pseudo-labels | 0.084 | 0.243 | 0.342 |
 
 The hybrid-trained detector nearly doubles small-object recall (0.078 vs 0.040) at the cost of medium and large object coverage. This confirms multi-scale pseudo-labels successfully shift the trained detector toward small-object discovery, exactly as designed. Absolute AP is below the pre-trained model because we used 500 training images vs the paper's 1.3M.
 
