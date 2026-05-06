@@ -4,10 +4,12 @@
 # Usage:
 #   PSEUDO_LABEL_NAME=baseline5   sbatch slurm/run_training_luiz.sh
 #   PSEUDO_LABEL_NAME=multiscale5 sbatch slurm/run_training_luiz.sh
+#   PSEUDO_LABEL_NAME=final5      sbatch slurm/run_training_luiz.sh
 #
 # Expected files:
 #   ${DATA_ROOT}/tiny-imagenet-5/annotations/v1_baseline_pseudo.json
 #   ${DATA_ROOT}/tiny-imagenet-5/annotations/v1_multiscale_pseudo.json
+#   ${DATA_ROOT}/tiny-imagenet-5/annotations/v1_final_pseudo.json
 #   ${DATA_ROOT}/tiny-imagenet-5/train_flat/
 
 #SBATCH --job-name=cutler-train-luiz
@@ -66,8 +68,12 @@ case "${PSEUDO_LABEL_NAME}" in
         PSEUDO_JSON="${ANNO_DIR_5C}/v1_multiscale_pseudo.json"
         DATASET_NAME="tinyimagenet_5c_multiscale_pseudo"
         ;;
+    final5)
+        PSEUDO_JSON="${ANNO_DIR_5C}/v1_final_pseudo.json"
+        DATASET_NAME="tinyimagenet_5c_final_pseudo"
+        ;;
     *)
-        echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline5' or 'multiscale5'."
+        echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline5', 'multiscale5', or 'final5'."
         exit 1
         ;;
 esac

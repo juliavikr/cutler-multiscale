@@ -17,10 +17,12 @@
 set -euo pipefail
 
 module load miniconda3
+source /software/miniconda3/etc/profile.d/conda.sh
+eval "$(conda shell.bash hook)"
 conda activate cutler
 
 # --- Paths (edit before submitting) ---
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
 DATASET_PATH="${DATASET_PATH:-${DATA_ROOT}/tiny-imagenet-10classes/train}"
 OUT_DIR="${OUT_DIR:-${REPO_ROOT}/pseudo_masks/tiny_imagenet}"
