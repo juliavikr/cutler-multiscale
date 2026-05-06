@@ -3,9 +3,10 @@
 # No GPU needed — CPU-only matplotlib rendering.
 #
 # Usage:
-#   sbatch slurm/run_visualize.sh
+#   sbatch slurm/run_visualize.sh                        # baseline (default)
+#   VARIANT_NAME=hybrid sbatch slurm/run_visualize.sh   # hybrid
 #
-# Output: experiments/visualizations/baseline/<image_id>_<n>masks.png
+# Output: experiments/visualizations/<variant>/<image_id>_<n>masks.png
 
 #SBATCH --job-name=visualize-masks
 # TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
@@ -26,10 +27,12 @@ module load miniconda3
 eval "$(conda shell.bash hook)"
 conda activate cutler
 
+VARIANT_NAME="${VARIANT_NAME:-baseline}"
+
 REPO_ROOT="${HOME}/cutler-multiscale"
-JSON="${HOME}/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_baseline_pseudo.json"
+JSON="${HOME}/data/tiny-imagenet-10classes/annotations/tinyimagenet_10c_${VARIANT_NAME}_pseudo.json"
 IMAGE_ROOT="${HOME}/data/tiny-imagenet-10classes/train"
-OUTPUT_DIR="${REPO_ROOT}/experiments/visualizations/baseline"
+OUTPUT_DIR="${REPO_ROOT}/experiments/visualizations/${VARIANT_NAME}"
 
 mkdir -p "${OUTPUT_DIR}"
 
