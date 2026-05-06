@@ -45,6 +45,7 @@ ANNO_DIR="${ANNO_DIR:-${DATA_ROOT}/tiny-imagenet-5/annotations}"
 RUN_DIR="${RUN_DIR:-${ANNO_DIR}/final_multiscale_onego}"
 FINAL_JSON="${FINAL_JSON:-${ANNO_DIR}/v1_final_pseudo.json}"
 DINO_WEIGHTS="${DINO_WEIGHTS:-${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth}"
+DINO_URL="${DINO_URL:-https://dl.fbaipublicfiles.com/dino/dino_deitsmall8_300ep_pretrain/dino_deitsmall8_300ep_pretrain.pth}"
 
 TAU="${TAU:-0.2}"
 FIXED_SIZE="${FIXED_SIZE:-480}"
@@ -60,8 +61,14 @@ if [[ ! -d "${DATASET_PATH}" ]]; then
 fi
 
 if [[ ! -f "${DINO_WEIGHTS}" ]]; then
-    echo "ERROR: DINO weights not found: ${DINO_WEIGHTS}"
-    echo "Pass DINO_WEIGHTS=/path/to/dino_deitsmall8_pretrain.pth or download the checkpoint first."
+    echo "DINO weights not found: ${DINO_WEIGHTS}"
+    echo "Downloading DINO ViT-S/8 weights from ${DINO_URL}"
+    mkdir -p "$(dirname "${DINO_WEIGHTS}")"
+    wget -c --progress=bar:force -O "${DINO_WEIGHTS}" "${DINO_URL}"
+fi
+
+if [[ ! -s "${DINO_WEIGHTS}" ]]; then
+    echo "ERROR: DINO weights download failed or produced an empty file: ${DINO_WEIGHTS}"
     exit 1
 fi
 
