@@ -73,6 +73,14 @@ def parse_float_list(text):
     return values
 
 
+def resolve_pretrain_url(pretrain_path):
+    if pretrain_path is None:
+        return None
+    if pretrain_path.startswith(("http://", "https://", "file://")):
+        return pretrain_path
+    return Path(pretrain_path).expanduser().resolve().as_uri()
+
+
 def parse_size_list(text):
     values = []
     for item in text.split(","):
@@ -2519,8 +2527,7 @@ if __name__ == "__main__":
     heatmap_crop_sizes = parse_size_list(args.heatmap_crop_sizes)
     border_retry_scales = parse_float_list(args.border_retry_scales)
 
-    if args.pretrain_path is not None:
-        url = args.pretrain_path
+    url = resolve_pretrain_url(args.pretrain_path)
     if args.vit_arch == 'base' and args.patch_size == 8:
         if args.pretrain_path is None:
             url = "https://dl.fbaipublicfiles.com/dino/dino_vitbase8_pretrain/dino_vitbase8_pretrain.pth"
