@@ -72,9 +72,11 @@ if [[ ! -s "${DINO_WEIGHTS}" ]]; then
     exit 1
 fi
 
-CLASS_COUNT="$(find "${DATASET_PATH}" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+CLASS_COUNT="$(find -L "${DATASET_PATH}" -mindepth 1 -maxdepth 1 -type d | wc -l)"
 if [[ "${CLASS_COUNT}" -lt 1 ]]; then
     echo "ERROR: no class folders found under ${DATASET_PATH}"
+    echo "Directory contents:"
+    ls -la "${DATASET_PATH}"
     exit 1
 fi
 
