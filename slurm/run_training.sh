@@ -50,6 +50,9 @@ case "${PSEUDO_LABEL_NAME}" in
     multiscale)
         PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_multiscale_pseudo.json"
         ;;
+    combined)
+        PSEUDO_JSON="${ANNO_DIR}/tinyimagenet_10c_combined_pseudo.json"
+        ;;
     *)
         echo "ERROR: Unknown PSEUDO_LABEL_NAME '${PSEUDO_LABEL_NAME}'. Expected 'baseline' or 'multiscale'."
         exit 1

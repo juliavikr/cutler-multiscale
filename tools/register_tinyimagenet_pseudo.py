@@ -21,3 +21,10 @@ register_coco_instances(
     os.path.join(_ANNO_DIR, "tinyimagenet_10c_multiscale_pseudo.json"),
     _IMAGE_ROOT,
 )
+
+register_coco_instances(
+    "tinyimagenet_combined_pseudo",
+    {},
+    os.path.join(_ANNO_DIR, "tinyimagenet_10c_combined_pseudo.json"),
+    _IMAGE_ROOT,
+)
