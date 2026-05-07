@@ -120,23 +120,23 @@ The hybrid-trained detector nearly doubles small-object recall (0.078 vs 0.040) 
 
 ## Pseudo-label Statistics (TinyImageNet 10c)
 
-| Metric | Baseline | Hybrid |
-|--------|----------|--------|
-| Total images | 500 | 500 |
-| Total annotations | 748 | 2,110 |
-| Avg masks/image | 1.50 | 4.22 |
-| Median masks/image | 1.00 | 4.00 |
-| Mean mask area (px²) | 1,020.71 | 43.82 |
-| Median mask area (px²) | 899.00 | 45.00 |
-| Small (<32² px) | 428 (57.2%) | 2,110 (100.0%) |
-| Medium (32²–96² px) | 320 (42.8%) | 0 (0.0%) |
-| Large (>96² px) | 0 (0.0%) | 0 (0.0%) |
-| Images with 0 masks | 1 | 12 |
-| Images with 1 mask | 282 | 44 |
-| Images with 2 masks | 185 | 72 |
-| Images with 3 masks | 32 | 85 |
-| Images with 4 masks | 0 | 85 |
-| Images with 5+ masks | 0 | 202 |
+| Metric | Baseline | Hybrid | Combined |
+|--------|----------|--------|----------|
+| Total images | 500 | 500 | 500 |
+| Total annotations | 748 | 2,110 | 1,493 |
+| Avg masks/image | 1.50 | 4.22 | 2.99 |
+| Median masks/image | 1.00 | 4.00 | 3.00 |
+| Mean mask area (px²) | 1,020.71 | 43.82 | 607.0 |
+| Median mask area (px²) | 899.00 | 45.00 | 184.0 |
+| Small (<32² px) | 428 (57.2%) | 2,110 (100.0%) | 1,104 (73.9%) |
+| Medium (32²–96² px) | 320 (42.8%) | 0 (0.0%) | 389 (26.1%) |
+| Large (>96² px) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| Images with 0 masks | 1 | 12 | 0 |
+| Images with 1 mask | 282 | 44 | — |
+| Images with 2 masks | 185 | 72 | — |
+| Images with 3 masks | 32 | 85 | — |
+| Images with 4 masks | 0 | 85 | — |
+| Images with 5+ masks | 0 | 202 | — |
 
 Both JSON files live on the cluster at `~/data/tiny-imagenet-10classes/annotations/` (gitignored — regenerate with `sbatch slurm/run_maskcut_baseline.sh` or `sbatch slurm/run_hybrid_maskcut_tinyimagenet.sh`).
 
