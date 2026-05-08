@@ -18,6 +18,9 @@ All heavy computation runs on the Bocconi HPC cluster via SLURM. Submit jobs wit
 |--------|--------|---------|
 | `run_maskcut_baseline.sh` | **Primary** | Single-scale baseline MaskCut on 10-class TinyImageNet. Use this for the controlled comparison. |
 | `run_multiscale_maskcut.sh` | **Primary** | Multi-scale MaskCut. Requires env vars — see `README.md` for the exact invocations for hybrid and MOST-lite methods. |
+| `run_hybrid_ablation_100.sh` | Ablation | Runs one named 100-image hybrid ablation on the 5-class TinyImageNet subset by creating a deterministic symlinked subset and executing the main multiscale pipeline. |
+| `run_hybrid_ablations_100_onejob.sh` | Ablation | Runs the full 100-image hybrid ablation suite sequentially inside a single SLURM job with no child job submissions. |
+| `submit_hybrid_ablations_100.sh` | Ablation | Submits the full 100-image hybrid ablation suite as separate SLURM jobs (`baseline`, `hp90`, `hp80`, `topk8`, `tightcrop`). |
 | `run_singlescale_maskcut.sh` | Diagnostic | Runs without `--multi-crop` via `multiscale_maskcut.py`. For ablation only. |
 | `run_speedtest.sh` | Diagnostic | Benchmarks per-image throughput on 1-class subset. Use to profile the ~48 s/image speed regression. |
 | `run_maskcut.sh` | Legacy | Original CutLER-scale MaskCut (full TinyImageNet-200). Not used in the current 10-class comparison. |
