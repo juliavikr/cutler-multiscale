@@ -66,6 +66,50 @@ python tools/make_cls_agnostic_coco.py \
 
 ---
 
+## `run_latest_pipeline.py`
+
+Reproducible end-to-end runner for the final 5-class study. It downloads the
+required datasets and DINO weights, prepares the locked TinyImageNet 5-class
+subset, generates baseline and refined hybrid pseudo-labels, merges them,
+trains one or more detector variants, and evaluates them on class-agnostic
+COCO.
+
+Example: run the final combined pipeline only
+
+```bash
+python tools/run_latest_pipeline.py \
+    --data-root ~/data \
+    --run-name latest_hybrid_pipeline \
+    --variants combined
+```
+
+Example: reproduce the baseline / hybrid / combined comparison
+
+```bash
+python tools/run_latest_pipeline.py \
+    --data-root ~/data \
+    --run-name latest_hybrid_comparison \
+    --variants baseline,hybrid,combined
+```
+
+Outputs:
+
+- `experiments/repro_runs/<run-name>/manifest.json`
+- `experiments/repro_runs/<run-name>/summary.md`
+- `experiments/repro_runs/<run-name>/summary.csv`
+- per-step logs under `experiments/repro_runs/<run-name>/logs/`
+
+---
+
+## `train_wrapper_dynamic.py`
+
+Registers a single COCO-format pseudo-label dataset from explicit `--json-path`
+and `--image-root` arguments, then delegates to `CutLER/cutler/train_net.py`.
+This is used by `run_latest_pipeline.py` to avoid relying on mutable shared
+annotation filenames.
+
+---
+
 ## `experiments/rank_small_ap.py`
 
 Scans training output directories for `eval.log` files, extracts COCO AP metrics, and prints runs ranked by APs (small-object AP). Optionally exports a CSV.

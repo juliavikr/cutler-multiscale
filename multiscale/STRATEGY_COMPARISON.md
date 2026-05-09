@@ -5,6 +5,14 @@ project. The goal is not to maximize the number of masks per image. The practica
 goal is to add a small number of useful small-object pseudo-masks without breaking
 the masks that normal CutLER/MaskCut already finds.
 
+For the final project write-up, the main path is:
+
+1. baseline single-scale MaskCut
+2. refined hybrid rescue masks
+3. merge the rescue masks with the original MaskCut masks
+
+The other variants below are exploratory references, not the final headline result.
+
 ## Short Recommendation
 
 For the next experiments, compare these three outputs on the same image set:

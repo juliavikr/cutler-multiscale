@@ -13,6 +13,8 @@ This document explains `multiscale/multiscale_maskcut.py`: what each part does, 
 
 The main motivation is to improve small-object discovery by "zooming in" through smaller crops.
 
+Important framing: in the final project pipeline, these crop-level masks are most useful as **rescue additions** to the original MaskCut masks, not as a replacement for them.
+
 ## Recommended Comparison
 
 The project should focus on these three methods:

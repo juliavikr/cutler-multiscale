@@ -17,6 +17,13 @@ The evaluation should separate three ideas:
 More masks per image is not enough. The output is better only if the extra masks
 correspond to real object instances and do not damage pseudo-label quality.
 
+For the final project story, the decisive downstream comparison is:
+
+- baseline single-scale pseudo-labels
+- refined hybrid rescue masks merged into the baseline set
+
+Hybrid-only and other exploratory branches remain useful diagnostics, but they are not the main final target.
+
 ## Methods To Compare
 
 Run every method on the same images with the same base MaskCut settings.

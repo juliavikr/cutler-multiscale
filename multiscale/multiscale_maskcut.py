@@ -2230,7 +2230,9 @@ if __name__ == "__main__":
     if not args.cpu:
         backbone.cuda()
 
-    img_folders = os.listdir(args.dataset_path)
+    # Keep folder traversal deterministic so repeated runs generate stable IDs
+    # and JSON ordering across filesystems.
+    img_folders = sorted(os.listdir(args.dataset_path))
 
     if args.out_dir is not None and not os.path.exists(args.out_dir) :
         os.mkdir(args.out_dir)

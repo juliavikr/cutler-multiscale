@@ -1,49 +1,80 @@
 # SLURM Scripts
 
-All heavy computation runs on the Bocconi HPC cluster via SLURM. Submit jobs with `sbatch`, monitor with `squeue -u <username>`, tail logs with `tail -f logs/<jobid>.out`.
+All heavy computation runs on the Bocconi HPC cluster through SLURM.
 
-## One-Time Setup (run once on first cluster login)
+## Canonical scripts
 
-| Script | Purpose |
-|--------|---------|
-| `install_detectron2.sh` | Install Detectron2 via miropsota pre-built wheels. Required before any training run. |
-| `download_checkpoint.sh` | Download `cutler_cascade_final.pth` (pretrained CutLER) and pre-generated MaskCut annotations. DINO weights must be downloaded separately — see `README.md` Setup section. |
-| `download_data.sh` | Download COCO val2017 images and annotations to `~/data/coco/`. |
-| `download_tinyimagenet.sh` | Download TinyImageNet-200 and create the 10-class subset at `~/data/tiny-imagenet-10classes/`. |
-| `fix_pillow.sh` | Fix a Pillow version conflict. Run only if you see Pillow import errors. |
+These are the scripts that matter for the final project story.
 
-## Pseudo-Label Generation
+### Pseudo-label generation
 
-| Script | Status | Purpose |
-|--------|--------|---------|
-| `run_maskcut_baseline.sh` | **Primary** | Single-scale baseline MaskCut on 10-class TinyImageNet. Use this for the controlled comparison. |
-| `run_multiscale_maskcut.sh` | **Primary** | Multi-scale MaskCut. Requires env vars — see `README.md` for the exact invocations for hybrid and MOST-lite methods. |
-| `run_hybrid_ablation_100.sh` | Ablation | Runs one named 100-image hybrid ablation on the 5-class TinyImageNet subset by creating a deterministic symlinked subset and executing the main multiscale pipeline. |
-| `run_hybrid_ablations_100_onejob.sh` | Ablation | Runs the full 100-image hybrid ablation suite sequentially inside a single SLURM job with no child job submissions. |
-| `submit_hybrid_ablations_100.sh` | Ablation | Submits the full 100-image hybrid ablation suite as separate SLURM jobs (`baseline`, `hp90`, `hp80`, `topk8`, `tightcrop`). |
-| `run_singlescale_maskcut.sh` | Diagnostic | Runs without `--multi-crop` via `multiscale_maskcut.py`. For ablation only. |
-| `run_speedtest.sh` | Diagnostic | Benchmarks per-image throughput on 1-class subset. Use to profile the ~48 s/image speed regression. |
-| `run_maskcut.sh` | Legacy | Original CutLER-scale MaskCut (full TinyImageNet-200). Not used in the current 10-class comparison. |
-| `run_multiscale_maskcut_tinyimagenet.sh` | Legacy | Older hardcoded multi-scale variant. Superseded by `run_multiscale_maskcut.sh`. |
+| Script | Role |
+|---|---|
+| `run_maskcut_baseline.sh` | baseline single-scale MaskCut generation |
+| `run_multiscale_maskcut.sh` | refined hybrid multi-scale generation through `multiscale/multiscale_maskcut.py` |
+| `run_hybrid_ablation_100.sh` | one named 100-image hybrid ablation |
+| `run_hybrid_ablations_100_onejob.sh` | full 100-image hybrid ablation suite in a single job |
 
-## Training and Evaluation
+### Training and evaluation
 
-| Script | Purpose |
-|--------|---------|
-| `run_training.sh` | Train Cascade Mask R-CNN. Set `PSEUDO_LABEL_NAME=baseline` or `multiscale` before submitting. |
-| `run_eval.sh` | Evaluate a checkpoint on COCO val2017 (class-agnostic). |
-| `run_visualize.sh` | Run `tools/visualize_pseudo_masks.py` on the cluster and save PNGs to `experiments/visualizations/`. |
+| Script | Role |
+|---|---|
+| `run_training_luiz.sh` | main detector training script used in the 5-class study |
+| `run_eval.sh` | class-agnostic COCO evaluation |
 
-## Setting Your SLURM Account
+### Utilities
 
-No script hardcodes an account number. Before submitting any job, set your own account one of two ways:
+| Script | Role |
+|---|---|
+| `run_singlescale_maskcut.sh` | diagnostic single-scale run through `multiscale_maskcut.py` |
+| `run_speedtest.sh` | throughput profiling |
+| `run_visualize.sh` | cluster-side pseudo-mask visualization |
+
+## Historical or non-primary scripts
+
+These are kept for reference, but they are not the recommended path for the final project:
+
+| Script | Status |
+|---|---|
+| `run_maskcut.sh` | legacy |
+| `run_multiscale_maskcut_tinyimagenet.sh` | older hardcoded path |
+| `run_hybrid_maskcut_tinyimagenet.sh` | older hybrid snapshot runner |
+| `run_maskcut_baseline_coco.sh` | older COCO-oriented baseline helper |
+| `run_multiscale_maskcut_coco.sh` | older COCO-oriented multiscale helper |
+| `run_training.sh` | older generic training runner |
+| `submit_hybrid_ablations_100.sh` | separate-job submission path, superseded by one-job ablation for the final study |
+| `run_final_multiscale_luiz.sh` | one-off historical fork runner |
+
+## One-time setup helpers
+
+| Script | Role |
+|---|---|
+| `install_detectron2.sh` | install Detectron2 in the cluster environment |
+| `download_checkpoint.sh` | download checkpoints and helper assets |
+| `download_data.sh` | download COCO data |
+| `download_tinyimagenet.sh` | download TinyImageNet subset |
+| `fix_pillow.sh` | fix Pillow version issues if needed |
+
+## Final workflow
 
 ```bash
-# Option A — set once in your shell session or ~/.bashrc:
-export SBATCH_ACCOUNT=<your_student_number>
+# 1. Baseline masks
+sbatch slurm/run_maskcut_baseline.sh
 
-# Option B — pass it per submission:
-sbatch --account=<your_student_number> slurm/run_maskcut_baseline.sh
+# 2. Refined hybrid masks
+sbatch slurm/run_multiscale_maskcut.sh
+
+# 3. Merge baseline + refined hybrid
+python tools/combine_pseudo_labels.py ...
+
+# 4. Train detector
+sbatch slurm/run_training_luiz.sh
+
+# 5. Evaluate
+sbatch slurm/run_eval.sh
 ```
 
-SLURM picks up `SBATCH_ACCOUNT` automatically when the `#SBATCH --account` line is absent from the script.
+## Notes
+
+- The final project result is based on **combined pseudo-labels**, not hybrid-only pseudo-labels.
+- The authoritative method implementation is `multiscale/multiscale_maskcut.py`.

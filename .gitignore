@@ -167,6 +167,8 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+/debug
+
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -246,6 +248,7 @@ pseudo_labels/
 experiments/training_*/
 experiments/eval_*/
 experiments/visualizations/
+experiments/repro_runs/
 
 # Auto-generated visualization dumps (regenerate with slurm/run_visualize.sh)
 # presentation/02_visualizations/selected/ is intentionally NOT ignored — for hand-picked images

@@ -8,6 +8,8 @@ This document explains everything about this project from scratch — no prior k
 
 This is a computer vision course project at Bocconi University. The goal is to **detect objects in images automatically, without ever showing the computer a single hand-labeled example**. We start from an existing system called **CutLER** (published by Facebook Research) that already does this reasonably well, and we extend it to be better at finding **small objects** — things like distant pedestrians, small animals, or vehicles far away that the original system tends to miss.
 
+Our final method does **not** replace the original MaskCut masks. Instead, it generates **additional rescue masks** in informative crops and then **combines** them with the original single-scale MaskCut output.
+
 ---
 
 ## 2. The Core Problem: What Is Unsupervised Object Detection?
@@ -165,9 +167,9 @@ This is exactly what our multi-scale extension does.
 
 ## 6. Our Extension: Multi-Scale MaskCut
 
-### The image pyramid concept
+### The crop-rescue idea
 
-Instead of running MaskCut once at native resolution, we build an **image pyramid**: multiple versions of the image at different scales and crop positions.
+Instead of trusting a single full-image MaskCut pass, we first run the original baseline and then build additional crop views around locally distinctive regions. The role of the multi-scale stage is to **add missing small-object masks**, not to replace the full-image masks.
 
 ```
 Full image (1×)        → run MaskCut → masks at full scale
@@ -179,17 +181,18 @@ Each "crop" is a rectangular sub-region of the original image, resized to the st
 
 ### The pipeline
 
-1. **Generate crop windows**: For each scale (1.0, 0.75, 0.5), create a grid of overlapping windows covering the full image
-2. **Run MaskCut on each crop independently**: Each crop is treated as if it were a standalone image
-3. **Back-project masks to full-image coordinates**: A mask in a 480×480 crop → scaled and shifted to the original image's coordinate system
-4. **Merge all candidate masks**: Collect masks from all crops at all scales, then remove duplicates
-   - Sort by mask quality/size
-   - If two masks overlap by more than 50% IoU, keep only the better one (Non-Maximum Suppression / NMS)
-5. **Output**: Final set of masks per image — same JSON format as original MaskCut
+1. **Run baseline full-image MaskCut**: This gives the original trusted pseudo-masks
+2. **Compute a DINO feature-contrast heatmap**: This highlights locally distinctive regions that may contain missed structure
+3. **Select crop windows**: Place multi-size crops around strong heatmap regions
+4. **Run MaskCut on each crop independently**: Each crop is treated as a standalone image, so small objects get more patch resolution
+5. **Back-project crop masks**: Crop predictions are mapped back to full-image coordinates
+6. **Filter and deduplicate**: Remove fragments, contained masks, and obvious duplicates
+7. **Combine with the baseline masks**: Keep the original single-scale masks and add only useful rescue masks from the crop stage
+8. **Output**: A merged pseudo-label set in the same JSON format as original MaskCut
 
 ### Expected improvement
 
-By running at finer scales, we recover small objects that were previously invisible at 1× resolution. The expected improvement is in **APs** — small-object AP — with possible minor decreases in APl (large objects are already found at 1× and don't need the zoom, so the extra crops mainly add noise there).
+By running at finer scales, we recover small objects that were previously invisible at 1× resolution. The intended win is **not** “hybrid-only beats baseline.” The intended win is that **baseline + rescue masks** improves the final pseudo-label set, especially for small or missed regions.
 
 ---
 
@@ -246,15 +249,16 @@ CutLER/
 
 ```
 multiscale/
-├── multiscale_maskcut.py        # Main implementation (v2, current)
-├── multiscale_maskcut_hybrid.py # Heatmap-only snapshot (ablation reference)
-├── multiscale_maskcut_legacy.py # v1 IoU-NMS snapshot (for reference)
+├── multiscale_maskcut.py        # Main implementation (current)
+├── multiscale_maskcut_hybrid.py # Historical snapshot, kept for reference
+├── multiscale_maskcut_legacy.py # Historical snapshot, kept for reference
+├── final_multiscale.py          # Historical final-variant fork, kept for reference
 ├── MULTISCALE_MASKCUT.md        # Code guide and full CLI reference
-├── STRATEGY_COMPARISON.md       # Comparison of all crop proposal strategies
+├── STRATEGY_COMPARISON.md       # Comparison of crop proposal strategies
 └── EVALUATION_PROCESS.md        # Evaluation methodology and metrics
 ```
 
-**`multiscale_maskcut.py`** — The heart of our contribution. It extends MaskCut by running crop-level MaskCut passes guided by DINO feature heatmaps or token clusters, then merging the results with graph-based deduplication. See `multiscale/MULTISCALE_MASKCUT.md` for the full code guide and CLI reference.
+**`multiscale_maskcut.py`** — The heart of our contribution. It extends MaskCut by running crop-level MaskCut rescue passes guided by DINO feature heatmaps, then combines those extra masks with the original single-scale MaskCut output after filtering and deduplication. See `multiscale/MULTISCALE_MASKCUT.md` for the full code guide and CLI reference.
 
 ---
 
