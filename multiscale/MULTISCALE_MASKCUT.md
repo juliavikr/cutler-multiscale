@@ -17,16 +17,15 @@ Important framing: in the final project pipeline, these crop-level masks are mos
 
 ## Recommended Comparison
 
-The project should focus on these three methods:
+The project should focus on these two methods:
 
 | Method | Role | Required flags |
 | --- | --- | --- |
 | Baseline MaskCut | Full-image reference point | no `--multi-crop` |
 | Hybrid heatmap | Main multiscale method | `--multi-crop --ms-preset small` |
-| MOST-lite v2 soft | Experimental token-cluster method | `--multi-crop --ms-preset mostlite --crf-iou-thresh 0.45` |
 
 The multiscale scripts always write split outputs. For training and quantitative
-comparison, use `multiscale` for hybrid and MOST-lite v2 soft. Keep `combined`
+comparison, use `multiscale` for hybrid. Keep `combined`
 as a visual/debug output because it can contain overlapping normal + crop masks.
 
 ## File Structure and Logic
@@ -242,22 +241,6 @@ PRIMARY_OUTPUT=multiscale \
 sbatch slurm/run_multiscale_maskcut.sh
 ```
 
-### MOST-lite v2 soft
-
-```bash
-DATASET_PATH="${HOME}/data/tiny-imagenet-10classes/train" \
-OUT_DIR="${HOME}/data/tiny-imagenet-10classes/annotations" \
-DINO_WEIGHTS="${HOME}/data/weights/dino_deitsmall8_pretrain.pth" \
-TAU=0.15 \
-N_MASKS=3 \
-FIXED_SIZE=480 \
-NUM_FOLDER_PER_JOB=10 \
-MS_PRESET=mostlite \
-CRF_IOU_THRESH=0.45 \
-PRIMARY_OUTPUT=multiscale \
-sbatch slurm/run_multiscale_maskcut.sh
-```
-
 ## Option B: Direct Python Flags
 
 From repository root, baseline is the same command without `--multi-crop`.
@@ -267,17 +250,6 @@ Hybrid heatmap adds:
 ```text
 --multi-crop --ms-preset small --primary-output multiscale
 ```
-
-MOST-lite v2 soft adds:
-
-```text
---multi-crop --ms-preset mostlite --crf-iou-thresh 0.45 --primary-output multiscale
-```
-
-For reference, the `mostlite` preset already enables the v2 cleanup behavior:
-`--crop-n 1`, `--crop-keep-per-window 1`, border retry, crop-shape rejection,
-token-cluster alignment scoring, and the stricter default CRF threshold. The
-v2-soft command changes only the CRF threshold from `0.50` to `0.45`.
 
 ## Notes and limitations
 

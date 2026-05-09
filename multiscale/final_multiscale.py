@@ -122,31 +122,6 @@ MULTISCALE_PRESETS = {
         "two_stage_crop": True,
         "primary_output": "multiscale",
     },
-    "mostlite": {
-        "crop_mode": "mostlite",
-        "heatmap_crop_sizes": "0.25,0.35,0.5",
-        "heatmap_top_k": 12,
-        "heatmap_spatial_rescue": 0,
-        "mostlite_percentile": 78.0,
-        "mostlite_sim_percentile": 92.0,
-        "crop_N": 1,
-        "crop_keep_per_window": 1,
-        "border_retry": True,
-        "border_retry_scales": "1.4,1.8",
-        "border_retry_touch_thresh": 0.5,
-        "border_retry_sides_thresh": 2,
-        "crop_shape_reject": True,
-        "crop_fill_thresh": 0.9,
-        "crf_iou_thresh": 0.5,
-        "keep_topk": 12,
-        "min_mask_area_ratio": 0.0001,
-        "max_mask_area_ratio": 0.02,
-        "containment_thresh": 0.85,
-        "box_expand_ratio": 0.05,
-        "merge_max_aspect_ratio": 3.0,
-        "two_stage_crop": True,
-        "primary_output": "multiscale",
-    },
     "final": {
         "crop_mode": "heatmap",
         "heatmap_crop_sizes": "0.25,0.35,0.5",
@@ -200,8 +175,6 @@ def apply_multiscale_preset(args):
         "heatmap_crop_sizes": ("--heatmap-crop-sizes",),
         "heatmap_top_k": ("--heatmap-top-k",),
         "heatmap_spatial_rescue": ("--heatmap-spatial-rescue",),
-        "mostlite_percentile": ("--mostlite-percentile",),
-        "mostlite_sim_percentile": ("--mostlite-sim-percentile",),
         "crop_N": ("--crop-N", "--crop-n"),
         "crop_keep_per_window": ("--crop-keep-per-window",),
         "border_retry": ("--border-retry",),
@@ -1215,120 +1188,6 @@ def component_to_full_mask(component, orig_w, orig_h):
     return resize_binary_mask(component.astype(np.bool_), (orig_w, orig_h))
 
 
-def generate_mostlite_windows(
-    I,
-    backbone,
-    patch_size,
-    fixed_size,
-    crop_sizes,
-    covered_mask,
-    top_k,
-    nms_iou,
-    percentile,
-    sim_percentile,
-    cpu=False,
-):
-    """MOST-inspired proposal mode using DINO token clusters.
-
-    This keeps the implementation lightweight: seed foreground-like tokens from
-    full-image DINO features, expand each seed by feature-similar connected
-    tokens, then convert compact token clusters into crop boxes for MaskCut.
-    """
-    orig_w, orig_h = I.size
-    image_array = np.array(I)
-    feat = extract_dino_feature_grid(I, backbone, patch_size, fixed_size, cpu=cpu)
-    _, feat_h, feat_w = feat.shape
-    sizes = crop_sizes_to_pixels(crop_sizes, orig_w, orig_h)
-    objectness = objectness_from_feature_grid(feat, covered_mask, orig_w, orig_h)
-
-    threshold = np.percentile(objectness, percentile)
-    seed_order = np.argsort(objectness.ravel())[::-1]
-    flat_feat = feat.reshape(feat.shape[0], -1).T
-    selected = []
-    selected_boxes = []
-    used_seed_mask = np.zeros((feat_h, feat_w), dtype=np.bool_)
-    proposals = []
-    max_seeds = max(top_k * 25, 120) if top_k > 0 else 250
-
-    for flat_idx in seed_order:
-        seed_score = float(objectness.ravel()[flat_idx])
-        if seed_score < threshold and len(proposals) >= max_seeds // 2:
-            break
-        sy, sx = np.unravel_index(flat_idx, objectness.shape)
-        if used_seed_mask[sy, sx]:
-            continue
-
-        sim = flat_feat @ flat_feat[flat_idx]
-        sim_map = sim.reshape(feat_h, feat_w)
-        sim_thresh = max(0.35, float(np.percentile(sim, sim_percentile)))
-        region = (sim_map >= sim_thresh) & (objectness >= np.percentile(objectness, max(50.0, percentile - 18.0)))
-        if not region[sy, sx]:
-            region = sim_map >= sim_thresh
-
-        labels, num_labels = ndimage.label(region)
-        label_id = labels[sy, sx]
-        if label_id == 0:
-            continue
-        component = labels == label_id
-        component_area = int(component.sum())
-        if component_area < 2 or component_area > int(0.28 * feat_h * feat_w):
-            continue
-
-        ys, xs = np.where(component)
-        x1, x2 = int(xs.min()), int(xs.max() + 1)
-        y1, y2 = int(ys.min()), int(ys.max() + 1)
-        component_box = (x1, y1, x2, y2)
-        image_box = component_to_image_box(component_box, orig_w, orig_h, feat_w, feat_h)
-        cx = (image_box[0] + image_box[2]) / 2.0
-        cy = (image_box[1] + image_box[3]) / 2.0
-        crop_size = choose_crop_size_for_component(component_box, sizes, orig_w, orig_h, feat_w, feat_h)
-        crop_box = clip_square_box(cx, cy, crop_size, orig_w, orig_h)
-
-        if any(box_iou(crop_box, kept) > nms_iou for kept in selected_boxes):
-            used_seed_mask[component] = True
-            continue
-
-        bbox_area = max(1, (x2 - x1) * (y2 - y1))
-        compactness = component_area / bbox_area
-        crop_area = max(1, (crop_box[2] - crop_box[0]) * (crop_box[3] - crop_box[1]))
-        coverage = 0.0
-        if covered_mask is not None and covered_mask.any():
-            coverage = float(covered_mask[crop_box[1]:crop_box[3], crop_box[0]:crop_box[2]].sum()) / crop_area
-        edge = compute_edge_density(image_array, crop_box[1], crop_box[0], crop_box[3], crop_box[2])
-        component_objectness = float(objectness[component].mean())
-        component_similarity = float(sim_map[component].mean())
-        crop_score = (
-            1.4 * component_objectness
-            + 0.8 * seed_score
-            + 0.7 * compactness
-            + 0.4 * component_similarity
-            + 0.3 * edge / 128.0
-            - 0.6 * coverage
-        )
-        proposals.append((crop_score, crop_box, component.copy(), component_area, image_box))
-        used_seed_mask[component] = True
-        if len(proposals) >= max_seeds:
-            break
-
-    proposals.sort(key=lambda item: item[0], reverse=True)
-    for score, box, component, component_area, image_box in proposals:
-        if any(box_iou(box, kept) > nms_iou for kept in selected_boxes):
-            continue
-        selected.append({
-            "box": box,
-            "score": float(score),
-            "reason": "mostlite",
-            "proposal_mask": component_to_full_mask(component, orig_w, orig_h),
-            "proposal_area": int(component_area),
-            "proposal_box": list(image_box),
-        })
-        selected_boxes.append(box)
-        if top_k > 0 and len(selected) >= top_k:
-            break
-
-    return selected
-
-
 def merge_mask_candidates(
     candidates,
     merge_iou_thresh,
@@ -1861,8 +1720,6 @@ def maskcut_multicrop(
     heatmap_nms_iou=0.4,
     heatmap_percentile=85.0,
     heatmap_spatial_rescue=4,
-    mostlite_percentile=78.0,
-    mostlite_sim_percentile=92.0,
     border_retry=False,
     border_retry_scales=None,
     border_retry_touch_thresh=0.5,
@@ -1949,25 +1806,7 @@ def maskcut_multicrop(
             covered_mask = np.logical_or.reduce(unwrap_masks(protected_masks))
 
     eligible = []
-    if crop_mode == "mostlite":
-        top_k = crop_top_k if crop_top_k > 0 else heatmap_top_k
-        eligible = generate_mostlite_windows(
-            I,
-            backbone,
-            patch_size,
-            fixed_size,
-            heatmap_crop_sizes,
-            covered_mask,
-            top_k,
-            heatmap_nms_iou,
-            mostlite_percentile,
-            mostlite_sim_percentile,
-            cpu=cpu,
-        )
-        stats["total_windows"] = len(eligible)
-        stats["eligible_windows"] = len(eligible)
-        stats["ranked_windows"] = len(eligible)
-    elif crop_mode == "heatmap":
+    if crop_mode == "heatmap":
         top_k = crop_top_k if crop_top_k > 0 else heatmap_top_k
         eligible = generate_heatmap_windows(
             I,
@@ -2476,8 +2315,8 @@ if __name__ == "__main__":
     parser.add_argument('--N', type=int, default=3, help='the maximum number of pseudo-masks per image')
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--multi-crop', action='store_true', help='run MaskCut on multiple crop scales and merge masks')
-    parser.add_argument('--ms-preset', type=str, default='final', choices=['small', 'balanced', 'mostlite', 'final', 'legacy'], help='bundle of multi-crop defaults; individual flags still override the preset')
-    parser.add_argument('--crop-mode', type=str, default='heatmap', choices=['grid', 'heatmap', 'mostlite'], help='crop proposal mode: dense grid, DINO feature-contrast heatmap, or MOST-lite token clusters')
+    parser.add_argument('--ms-preset', type=str, default='final', choices=['small', 'balanced', 'final', 'legacy'], help='bundle of multi-crop defaults; individual flags still override the preset')
+    parser.add_argument('--crop-mode', type=str, default='heatmap', choices=['grid', 'heatmap'], help='crop proposal mode: dense grid or DINO feature-contrast heatmap')
     parser.add_argument('--crop-scales', type=str, default='1.0,0.75,0.5', help='comma separated crop scales for multi-crop mode')
     parser.add_argument('--crop-overlap', type=float, default=0.3, help='overlap ratio between adjacent windows in multi-crop mode')
     parser.add_argument('--crop-max-per-scale', type=int, default=0, help='limit number of windows per scale (0 keeps all)')
@@ -2500,8 +2339,6 @@ if __name__ == "__main__":
     parser.add_argument('--heatmap-nms-iou', type=float, default=0.4, help='crop-box NMS IoU for heatmap crop proposals')
     parser.add_argument('--heatmap-percentile', type=float, default=85.0, help='minimum feature-contrast percentile considered for heatmap crop peaks')
     parser.add_argument('--heatmap-spatial-rescue', type=int, default=-1, help='number of heatmap crop slots reserved for under-covered spatial cells (-1 uses preset/auto)')
-    parser.add_argument('--mostlite-percentile', type=float, default=78.0, help='foreground-token objectness percentile for MOST-lite crop proposals')
-    parser.add_argument('--mostlite-sim-percentile', type=float, default=92.0, help='feature-similarity percentile used to grow MOST-lite token clusters')
     parser.add_argument('--border-retry', action='store_true', help='rerun crop MaskCut on larger crops when the best crop mask touches internal crop borders')
     parser.add_argument('--border-retry-scales', type=str, default='1.4,1.8', help='comma separated scale multipliers for border-aware crop retries')
     parser.add_argument('--border-retry-touch-thresh', type=float, default=0.5, help='internal border-touch threshold that triggers crop retry and crop-shaped rejection')
@@ -2631,8 +2468,6 @@ if __name__ == "__main__":
                         heatmap_nms_iou=args.heatmap_nms_iou,
                         heatmap_percentile=args.heatmap_percentile,
                         heatmap_spatial_rescue=args.heatmap_spatial_rescue,
-                        mostlite_percentile=args.mostlite_percentile,
-                        mostlite_sim_percentile=args.mostlite_sim_percentile,
                         border_retry=args.border_retry,
                         border_retry_scales=border_retry_scales,
                         border_retry_touch_thresh=args.border_retry_touch_thresh,
@@ -2752,25 +2587,7 @@ if __name__ == "__main__":
     # save annotations
     crop_tag = ''
     if args.multi_crop:
-        if args.crop_mode == 'mostlite':
-            crop_tag = '_mostlite_hs{}_hk{}_mp{}_ms{}_miou{}'.format(
-                args.heatmap_crop_sizes.replace(',', '-'),
-                args.heatmap_top_k,
-                args.mostlite_percentile,
-                args.mostlite_sim_percentile,
-                args.merge_iou_thresh,
-            )
-            if args.crop_N > 0 and args.crop_N != args.N:
-                crop_tag += '_cN{}'.format(args.crop_N)
-            if args.crop_keep_per_window > 0:
-                crop_tag += '_kpw{}'.format(args.crop_keep_per_window)
-            if args.border_retry:
-                crop_tag += '_br{}'.format(args.border_retry_scales.replace(',', '-'))
-            if args.crop_shape_reject:
-                crop_tag += '_csr{}'.format(args.crop_fill_thresh)
-            if args.crf_iou_thresh != 0.3:
-                crop_tag += '_crf{}'.format(args.crf_iou_thresh)
-        elif args.crop_mode == 'heatmap':
+        if args.crop_mode == 'heatmap':
             crop_tag = '_heatmap_hs{}_hp{}_hk{}_sr{}_miou{}'.format(
                 args.heatmap_crop_sizes.replace(',', '-'),
                 args.heatmap_percentile,
@@ -2784,7 +2601,7 @@ if __name__ == "__main__":
                 args.crop_overlap,
                 args.merge_iou_thresh,
             )
-        if args.crop_mode != 'mostlite' and args.crop_N > 0 and args.crop_N != args.N:
+        if args.crop_N > 0 and args.crop_N != args.N:
             crop_tag += '_cN{}'.format(args.crop_N)
         crop_tag += '_preset{}'.format(args.ms_preset)
         crop_tag += '_ts{}'.format(args.two_stage_max_covered_ratio)

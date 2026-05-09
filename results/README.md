@@ -2,6 +2,15 @@
 
 This folder is for committed result summaries and presentation-ready artifacts. Large raw outputs such as checkpoints, pseudo-label JSONs, and SLURM logs stay off-repo on the cluster.
 
+## Current committed artifacts
+
+- `results/detector_results_5class.csv` - final 5-class detector comparison table
+- `results/hybrid_ablation_100_summary.csv` - 100-image ablation summary table
+- `results/figures/` - curated PNG plots for the report and poster
+  - `detector_results_5class.png` - main detector comparison figure
+  - `hybrid_ablation/` - ablation summary figures
+  - `training_losses/` - training loss progression figures
+
 ## What belongs here
 
 - compact AP summary tables
@@ -64,4 +73,5 @@ Interpretation:
 - top-level experiment ledger: `PROJECT_NOTES.md`
 - method explanation: `PROJECT_OVERVIEW.md`
 - ablation CSV: `results/hybrid_ablation_100_summary.csv`
+- detector CSV: `results/detector_results_5class.csv`
 - plot generators: `experiments/plot_hybrid_ablation_results.py`, `experiments/plot_training_losses.py`

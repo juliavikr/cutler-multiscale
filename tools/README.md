@@ -29,9 +29,9 @@ Output: `<output-dir>/<image_id>.png` files. On the cluster, use `sbatch slurm/r
 
 ---
 
-## `register_tinyimagenet_pseudo.py`
+## `register_tinyimagenet_pseudo.py` (legacy)
 
-Registers TinyImageNet pseudo-label datasets with Detectron2's dataset catalog. Not called directly — imported automatically by `train_wrapper.py` at training time. Registers two datasets:
+Registers TinyImageNet pseudo-label datasets with Detectron2's dataset catalog. Not called directly — imported automatically by the older `train_wrapper.py` training path. Registers two datasets:
 - `tinyimagenet_baseline_pseudo`
 - `tinyimagenet_multiscale_pseudo`
 
@@ -39,7 +39,7 @@ Paths are resolved from `~/data/tiny-imagenet-10classes/`.
 
 ---
 
-## `train_wrapper.py`
+## `train_wrapper.py` (legacy)
 
 Wraps `CutLER/cutler/train_net.py` by pre-registering TinyImageNet datasets before Detectron2 initialises. Called automatically by `slurm/run_training.sh`. Run from `CutLER/cutler/` in the same way as `train_net.py` directly:
 

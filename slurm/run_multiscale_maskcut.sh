@@ -66,8 +66,6 @@ HEATMAP_TOP_K="${HEATMAP_TOP_K:-}"
 HEATMAP_NMS_IOU="${HEATMAP_NMS_IOU:-}"
 HEATMAP_PERCENTILE="${HEATMAP_PERCENTILE:-}"
 HEATMAP_SPATIAL_RESCUE="${HEATMAP_SPATIAL_RESCUE:-}"
-MOSTLITE_PERCENTILE="${MOSTLITE_PERCENTILE:-}"
-MOSTLITE_SIM_PERCENTILE="${MOSTLITE_SIM_PERCENTILE:-}"
 BORDER_RETRY="${BORDER_RETRY:-0}"
 BORDER_RETRY_SCALES="${BORDER_RETRY_SCALES:-}"
 BORDER_RETRY_TOUCH_THRESH="${BORDER_RETRY_TOUCH_THRESH:-}"
@@ -112,8 +110,6 @@ add_arg_if_set "${HEATMAP_TOP_K}" --heatmap-top-k
 add_arg_if_set "${HEATMAP_NMS_IOU}" --heatmap-nms-iou
 add_arg_if_set "${HEATMAP_PERCENTILE}" --heatmap-percentile
 add_arg_if_set "${HEATMAP_SPATIAL_RESCUE}" --heatmap-spatial-rescue
-add_arg_if_set "${MOSTLITE_PERCENTILE}" --mostlite-percentile
-add_arg_if_set "${MOSTLITE_SIM_PERCENTILE}" --mostlite-sim-percentile
 add_arg_if_set "${BORDER_RETRY_SCALES}" --border-retry-scales
 add_arg_if_set "${BORDER_RETRY_TOUCH_THRESH}" --border-retry-touch-thresh
 add_arg_if_set "${BORDER_RETRY_SIDES_THRESH}" --border-retry-sides-thresh

@@ -1,0 +1,6 @@
+variant,images,full_masks,windows,rescue,generated,crop_candidates,scored,crop_merged,merged,final_annotations
+baseline,100,98,1200,386,1189,1189,1189,398,496,496
+hp90,100,98,1200,386,1189,1189,1189,398,496,496
+hp80,100,98,1200,386,1189,1189,1189,398,496,496
+topk8,100,98,800,400,792,792,792,283,381,381
+tightcrop,100,98,1200,390,1195,1195,1195,719,816,816

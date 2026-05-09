@@ -250,7 +250,6 @@ CutLER/
 ```
 multiscale/
 ├── multiscale_maskcut.py        # Main implementation (current)
-├── multiscale_maskcut_hybrid.py # Historical snapshot, kept for reference
 ├── multiscale_maskcut_legacy.py # Historical snapshot, kept for reference
 ├── final_multiscale.py          # Historical final-variant fork, kept for reference
 ├── MULTISCALE_MASKCUT.md        # Code guide and full CLI reference

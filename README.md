@@ -158,8 +158,8 @@ If you want to run individual stages manually, the core project-owned pieces are
 | `multiscale/` | our custom multi-scale pseudo-label generation code and method docs |
 | `slurm/` | cluster runners for generation, training, eval, and ablations |
 | `tools/` | utility scripts for merging, plotting, and visualization |
-| `results/` | committed result summaries |
-| `experiments/visualizations/` | generated charts and figure assets |
+| `results/` | committed result summaries, tables, and curated figures |
+| `experiments/visualizations/` | regenerated working visualizations (ignored in git) |
 | `CutLER/` | upstream vendor code, not modified here |
 
 ## Key project-owned files
@@ -181,11 +181,9 @@ If you want to run individual stages manually, the core project-owned pieces are
 
 These remain in the repo only as references to earlier design stages and should not be treated as the primary path:
 
-- `multiscale/multiscale_maskcut_hybrid.py`
 - `multiscale/multiscale_maskcut_legacy.py`
 - `multiscale/final_multiscale.py`
-- `slurm/run_hybrid_maskcut_tinyimagenet.sh`
-- `slurm/run_multiscale_maskcut_tinyimagenet.sh`
+- legacy cluster helpers in `slurm/`
 
 ## Reproduction notes
 

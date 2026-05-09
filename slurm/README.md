@@ -38,7 +38,6 @@ These are kept for reference, but they are not the recommended path for the fina
 |---|---|
 | `run_maskcut.sh` | legacy |
 | `run_multiscale_maskcut_tinyimagenet.sh` | older hardcoded path |
-| `run_hybrid_maskcut_tinyimagenet.sh` | older hybrid snapshot runner |
 | `run_maskcut_baseline_coco.sh` | older COCO-oriented baseline helper |
 | `run_multiscale_maskcut_coco.sh` | older COCO-oriented multiscale helper |
 | `run_training.sh` | older generic training runner |
