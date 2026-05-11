@@ -3,7 +3,7 @@
 #SBATCH --job-name=cutler-ss-maskcut
 #SBATCH --partition=stud
 #SBATCH --qos=stud
-# TODO: set your SLURM account — export SBATCH_ACCOUNT=<your_number>
+# TODO: set your SLURM account â€” export SBATCH_ACCOUNT=<your_number>
 #       or pass --account=<your_number> to sbatch at submission time.
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -23,16 +23,15 @@ conda activate cutler
 # --- Paths (edit before submitting) ---
 REPO_ROOT="${HOME}/cutler-multiscale"
 DATA_ROOT="${DATA_ROOT:-${HOME}/data}"                       # override via env if needed
-DATASET_PATH="${DATA_ROOT}/tiny-imagenet-5/train"
-DATASET_PATH_WITH_IMAGES=1         # 200 class subdirectories
-OUT_DIR="${REPO_ROOT}/pseudo_masks/tiny_imagenet_singlescale"
+DATASET_PATH="${DATASET_PATH:-${DATA_ROOT}/tiny-imagenet-5/train_flat}"
+OUT_DIR="${OUT_DIR:-${DATA_ROOT}/tiny-imagenet-5/annotations}"
 DINO_WEIGHTS="${DATA_ROOT}/weights/dino_deitsmall8_pretrain.pth"
 
 mkdir -p "${OUT_DIR}"
 
-# --- Multi-scale MaskCut knobs (override via env) ---
-TAU="${TAU:-0.2}"
-N_MASKS="${N_MASKS:-2}"
+# --- Single-scale MaskCut knobs (override via env) ---
+TAU="${TAU:-0.15}"
+N_MASKS="${N_MASKS:-3}"
 FIXED_SIZE="${FIXED_SIZE:-480}"
 USE_CPU="${USE_CPU:-0}"
 CROP_SCALES="${CROP_SCALES:-1.0,0.5}"
@@ -75,4 +74,16 @@ python "${REPO_ROOT}/multiscale/multiscale_maskcut.py" \
     --out-dir "${OUT_DIR}" \
     "${EXTRA_ARGS[@]}"
 
-echo "Multi-scale MaskCut done. Annotations saved to ${OUT_DIR}."
+GENERATED=$(ls "${OUT_DIR}"/imagenet_train_fixsize${FIXED_SIZE}_tau${TAU}_N${N_MASKS}*.json 2>/dev/null | grep -v checkpoint | head -1)
+FINAL="${OUT_DIR}/tinyimagenet_5c_singlescale_pseudo.json"
+
+if [ -z "${GENERATED}" ]; then
+    echo "ERROR: could not find generated single-scale JSON in ${OUT_DIR}"
+    exit 1
+fi
+
+cp "${GENERATED}" "${FINAL}"
+
+echo "Single-scale MaskCut done."
+echo "Generated: ${GENERATED}"
+echo "Training-ready pseudo labels: ${FINAL}"

@@ -36,6 +36,8 @@ def parse_args():
     p.add_argument("--output-dir", required=True, help="Directory to save visualizations")
     p.add_argument("--num-samples", type=int, default=20, help="Number of images to visualize (default: 20)")
     p.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+    p.add_argument("--image-ids-file", default=None, help="Optional text file with one image_id per line to visualize")
+    p.add_argument("--write-image-ids-file", default=None, help="Optional path to write the sampled image_ids for reuse")
     return p.parse_args()
 
 
@@ -135,9 +137,24 @@ def main():
         print("ERROR: no annotations found in JSON.", file=sys.stderr)
         sys.exit(1)
 
-    n = min(args.num_samples, len(img_ids_with_anns))
-    sampled_ids = random.sample(img_ids_with_anns, n)
-    print(f"Sampling {n} of {len(img_ids_with_anns)} annotated images (seed={args.seed})")
+    if args.image_ids_file:
+        with open(os.path.expanduser(args.image_ids_file), "r", encoding="utf-8") as f:
+            sampled_ids = [int(line.strip()) for line in f if line.strip()]
+        sampled_ids = [image_id for image_id in sampled_ids if image_id in coco.imgs]
+        print(f"Loaded {len(sampled_ids)} image ids from {os.path.expanduser(args.image_ids_file)}")
+    else:
+        n = min(args.num_samples, len(img_ids_with_anns))
+        sampled_ids = random.sample(img_ids_with_anns, n)
+        print(f"Sampling {n} of {len(img_ids_with_anns)} annotated images (seed={args.seed})")
+        if args.write_image_ids_file:
+            write_path = os.path.expanduser(args.write_image_ids_file)
+            write_dir = os.path.dirname(write_path)
+            if write_dir:
+                os.makedirs(write_dir, exist_ok=True)
+            with open(write_path, "w", encoding="utf-8") as f:
+                for image_id in sampled_ids:
+                    f.write(f"{image_id}\n")
+            print(f"Wrote sampled image ids to {write_path}")
 
     visualized = 0
     mask_counts = []
