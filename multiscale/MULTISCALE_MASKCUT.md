@@ -15,18 +15,19 @@ The main motivation is to improve small-object discovery by "zooming in" through
 
 Important framing: in the final project pipeline, these crop-level masks are most useful as **rescue additions** to the original MaskCut masks, not as a replacement for them.
 
-## Recommended Comparison
+## Final comparison
 
-The project should focus on these two methods:
+The project compared these two methods:
 
 | Method | Role | Required flags |
 | --- | --- | --- |
 | Baseline MaskCut | Full-image reference point | no `--multi-crop` |
 | Hybrid heatmap | Main multiscale method | `--multi-crop --ms-preset small` |
 
-The multiscale scripts always write split outputs. For training and quantitative
-comparison, use `multiscale` for hybrid. Keep `combined`
-as a visual/debug output because it can contain overlapping normal + crop masks.
+The script always writes split outputs. For training and quantitative
+comparison, use the `multiscale` split for the hybrid method. The `combined`
+split (normal + crop masks together) is for diagnostic use only — it can
+contain overlapping masks that confuse detector training.
 
 ## File Structure and Logic
 
@@ -205,20 +206,9 @@ Baseline controls still apply:
 4. `--dataset-path`
 5. `--cpu`
 
-## How to Use
+## How to Run
 
-Use the same base MaskCut settings for all three methods:
-
-```text
---vit-arch small
---vit-feat k
---patch-size 8
---tau 0.15
---N 3
---fixed_size 480
-```
-
-## Option A: SLURM Commands
+### Option A: SLURM Commands
 
 ### Baseline
 
@@ -241,7 +231,7 @@ PRIMARY_OUTPUT=multiscale \
 sbatch slurm/run_multiscale_maskcut.sh
 ```
 
-## Option B: Direct Python Flags
+### Option B: Direct Python Flags
 
 From repository root, baseline is the same command without `--multi-crop`.
 

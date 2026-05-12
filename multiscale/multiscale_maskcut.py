@@ -1,5 +1,34 @@
 #!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
+"""
+Multi-scale MaskCut with DINO heatmap-guided crop selection.
+
+This is the core contribution of the cutler-multiscale project. It extends the
+original CutLER MaskCut algorithm (spectral graph partitioning on DINO patch
+features) with a two-stage pseudo-label generation pipeline:
+
+  Stage 1 — Baseline full-image MaskCut:
+    Run the standard single-scale MaskCut on the full image, producing up to N
+    pseudo-masks per image.
+
+  Stage 2 — Heatmap-guided crop rescue (--multi-crop --ms-preset small):
+    1. Compute a DINO feature-contrast heatmap to locate locally distinctive
+       regions that the full-image pass likely missed.
+    2. Place multi-size crop windows around the highest-scoring heatmap peaks
+       (plus a spatial rescue quota to cover image borders).
+    3. Run MaskCut independently inside each selected crop.
+    4. Back-project the crop-level masks to full-image coordinates.
+    5. Score, filter, and deduplicate the crop masks.
+    6. Write split outputs: 'normal' (baseline only), 'multiscale' (crop masks
+       only), and 'combined' (both merged — for diagnostic use only).
+
+The final project result uses the 'multiscale' crop masks merged into the
+baseline pseudo-labels via tools/combine_pseudo_labels.py. Running with
+--multi-crop disabled produces a standard single-scale baseline.
+
+See multiscale/MULTISCALE_MASKCUT.md for a full walkthrough of every function
+and CLI flag.
+"""
 
 import os
 import sys

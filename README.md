@@ -4,6 +4,18 @@ Improving small-object recovery in CutLER by adding **heatmap-guided multi-scale
 
 Important boundary: all project-specific work lives outside `CutLER/`. The upstream `CutLER/` folder is treated as read-only vendor code.
 
+## Quick orientation
+
+| If you want to… | Go to |
+|---|---|
+| Understand what this project does | [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) |
+| See the final numbers | [`PROJECT_NOTES.md`](PROJECT_NOTES.md) or [`results/`](results/) |
+| Reproduce the pipeline | [`tools/run_latest_pipeline.py`](tools/run_latest_pipeline.py) (see below) |
+| Read the core method code | [`multiscale/multiscale_maskcut.py`](multiscale/multiscale_maskcut.py) |
+| Understand the code structure | [`multiscale/MULTISCALE_MASKCUT.md`](multiscale/MULTISCALE_MASKCUT.md) |
+| Run cluster jobs manually | [`slurm/README.md`](slurm/README.md) |
+| See/regenerate result figures | [`experiments/`](experiments/) and [`results/`](results/) |
+
 ## Final project story
 
 The repository is organized around one main idea:
@@ -33,7 +45,7 @@ Takeaway: the refined hybrid method helps **after merging with baseline**, not b
 
 The most reproducible path is the new Python pipeline:
 
-- [tools/run_latest_pipeline.py](C:/Users/Luiz%20Venosa/Documents/Bocconi/Master/2nd%20Semester/Computer%20VIsion/project/cutler-multiscale/tools/run_latest_pipeline.py)
+- [tools/run_latest_pipeline.py](tools/run_latest_pipeline.py)
 
 It does the full final workflow:
 
@@ -65,11 +77,11 @@ The pipeline expects:
 This reproduces the **main grading-facing result**: baseline + refined hybrid merged.
 
 ```bash
-cd /home/3191856/cv_project/cutler-multiscale
+cd ~/cutler-multiscale
 
 python tools/run_latest_pipeline.py \
-  --data-root /home/3191856/data \
-  --run-root /home/3191856/cv_project/cutler-multiscale/experiments/repro_runs \
+  --data-root ~/data \
+  --run-root ~/cutler-multiscale/experiments/repro_runs \
   --run-name latest_hybrid_pipeline \
   --variants combined
 ```
@@ -83,11 +95,11 @@ This reruns the three most important 5-class detector variants:
 - baseline + refined hybrid combined
 
 ```bash
-cd /home/3191856/cv_project/cutler-multiscale
+cd ~/cutler-multiscale
 
 python tools/run_latest_pipeline.py \
-  --data-root /home/3191856/data \
-  --run-root /home/3191856/cv_project/cutler-multiscale/experiments/repro_runs \
+  --data-root ~/data \
+  --run-root ~/cutler-multiscale/experiments/repro_runs \
   --run-name latest_hybrid_comparison \
   --variants baseline,hybrid,combined
 ```
@@ -153,29 +165,25 @@ If you want to run individual stages manually, the core project-owned pieces are
 | Path | Purpose |
 |---|---|
 | `README.md` | top-level reproduction and final contribution summary |
-| `PROJECT_OVERVIEW.md` | plain-English explanation of the method |
+| `PROJECT_OVERVIEW.md` | plain-English explanation of the method, from scratch |
 | `PROJECT_NOTES.md` | experiment ledger, final results, ablations, runtime notes |
 | `multiscale/` | our custom multi-scale pseudo-label generation code and method docs |
 | `slurm/` | cluster runners for generation, training, eval, and ablations |
 | `tools/` | utility scripts for merging, plotting, and visualization |
+| `experiments/` | conda environment, analysis scripts, and regenerated visualizations |
 | `results/` | committed result summaries, tables, and curated figures |
-| `experiments/visualizations/` | regenerated working visualizations (ignored in git) |
-| `CutLER/` | upstream vendor code, not modified here |
+| `presentation/` | report draft, slide planning, and design decision rationale |
+| `CutLER/` | upstream vendor code (git submodule), not modified here |
 
-## Key project-owned files
+## Understanding the code
 
-### Core method
+If you want to read rather than run, the recommended path is:
 
-- `multiscale/multiscale_maskcut.py` - current main implementation
-- `multiscale/MULTISCALE_MASKCUT.md` - code guide and CLI reference
-- `multiscale/STRATEGY_COMPARISON.md` - comparison of proposal strategies
-- `multiscale/EVALUATION_PROCESS.md` - evaluation methodology
-
-### Utilities
-
-- `tools/combine_pseudo_labels.py` - merge baseline and refined hybrid masks
-- `experiments/plot_hybrid_ablation_results.py` - generate ablation charts
-- `experiments/plot_training_losses.py` - generate detector loss charts
+1. **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)** — plain-English explanation of the full pipeline (DINO, MaskCut, Cascade Mask R-CNN, our crop-rescue idea). No prior knowledge assumed.
+2. **[`multiscale/MULTISCALE_MASKCUT.md`](multiscale/MULTISCALE_MASKCUT.md)** — walks through every section of `multiscale_maskcut.py`: what each function does, why it exists, and what the CLI flags control.
+3. **[`multiscale/STRATEGY_COMPARISON.md`](multiscale/STRATEGY_COMPARISON.md)** — explains why we chose the heatmap-guided crop strategy over dense-grid alternatives.
+4. **[`multiscale/EVALUATION_PROCESS.md`](multiscale/EVALUATION_PROCESS.md)** — defines the evaluation methodology: pseudo-mask quality metrics, downstream AP metrics, and how to interpret noise vs. recall trade-offs.
+5. **[`PROJECT_NOTES.md`](PROJECT_NOTES.md)** — the full experiment ledger: locked parameters, result tables, ablation study, pseudo-label statistics, and open questions.
 
 ## Historical snapshots
 
@@ -187,17 +195,4 @@ These remain in the repo only as references to earlier design stages and should 
 
 ## Reproduction notes
 
-All heavy runs were executed on the Bocconi HPC cluster with a single A100 GPU. The final 5-class study used the locked class subset in [PROJECT_NOTES.md](C:/Users/Luiz%20Venosa/Documents/Bocconi/Master/2nd%20Semester/Computer%20VIsion/project/cutler-multiscale/PROJECT_NOTES.md) and the refined hybrid defaults described there.
-
-The project is intentionally organized so that:
-
-- `CutLER/` remains untouched vendor code
-- all project-specific logic lives in `multiscale/`, `tools/`, `slurm/`, and the project docs
-- the final successful result is the **combined** pipeline, not hybrid-only
-
-## Where to look next
-
-- final numbers and ablations: `PROJECT_NOTES.md`
-- plain-English method story: `PROJECT_OVERVIEW.md`
-- cluster commands: `slurm/README.md`
-- result summaries: `results/README.md`
+All heavy runs were executed on the Bocconi HPC cluster with a single A100 GPU. The final 5-class study used the locked class subset in [PROJECT_NOTES.md](PROJECT_NOTES.md) and the refined hybrid defaults described there.

@@ -25,6 +25,8 @@ This folder contains everything needed to produce the course report and slides f
 ## Status
 
 - [x] Baseline results available
-- [ ] Multiscale pseudo-labels — pending Luiz's finalization
-- [ ] Multiscale training + evaluation — pending
-- [ ] Visualizations selected — pending (run `sbatch slurm/run_visualize.sh` on cluster first)
+- [x] Multiscale pseudo-labels generated (refined hybrid, `--ms-preset small`)
+- [x] Multiscale training + evaluation complete (5-class study)
+- [x] 100-image ablation study complete
+- [x] Final numbers committed to `results/` and `PROJECT_NOTES.md`
+- [x] Figures generated (`results/figures/`)

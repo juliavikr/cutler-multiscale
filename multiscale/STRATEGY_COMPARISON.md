@@ -13,18 +13,17 @@ For the final project write-up, the main path is:
 
 The other variants below are exploratory references, not the final headline result.
 
-## Short Recommendation
+## Method Summary
 
-For the next experiments, compare these two outputs on the same image set:
+The two methods used in the final comparison:
 
-| Strategy                  | Script / flags                                                              | Best use                                          |
+| Strategy                  | Script / flags                                                              | Role                                              |
 | ------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------- |
-| Normal MaskCut            | `multiscale_maskcut.py` without `--multi-crop`, or the `normal` split | Baseline quality check                            |
-| Hybrid heatmap multi-crop | `--multi-crop --ms-preset small`                                          | Current main candidate                            |
+| Normal MaskCut            | `multiscale_maskcut.py` without `--multi-crop`, or the `normal` split | Baseline                                          |
+| Hybrid heatmap multi-crop | `--multi-crop --ms-preset small`                                          | Main multiscale method                            |
 
-Keep `combined` as a diagnostic output for now. It is useful visually, but it can
-create overlapping or hierarchical pseudo-labels that may confuse detector
-training.
+`combined` (normal + crop masks together) is kept as a diagnostic output only — it
+can contain overlapping masks that confuse detector training.
 
 ## Common Pipeline Pieces
 
@@ -401,37 +400,32 @@ Useful stats to record:
 - visually good small-object masks,
 - visually bad fragments.
 
-## Practical Next Steps
+## Debugging workflow (reference)
 
-1. Run the same images with baseline and hybrid heatmap.
-2. Convert all split outputs to overlays.
+This was the iterative workflow used during development. It is preserved here as
+a guide for anyone extending the method:
+
+1. Run both baseline and hybrid heatmap on the same image set.
+2. Convert all split outputs to overlays with `tools/visualize_pseudo_masks.py`.
 3. Compare `raw_multiscale` vs `multiscale` to see whether good masks are being
-   filtered out.
-4. If `raw_multiscale` misses objects, improve crop proposal.
-5. If `raw_multiscale` finds objects but `multiscale` loses them, improve scoring
-   and merging.
-6. Only test detector training after the final multiscale masks look cleaner than
-   the normal baseline on a small visual sample.
+   filtered out by the merge stage.
+4. If `raw_multiscale` misses objects entirely, adjust the crop proposal (heatmap
+   percentile, spatial rescue quota, crop sizes).
+5. If `raw_multiscale` finds objects but `multiscale` loses them, adjust the
+   scoring thresholds and merge IoU controls.
+6. Only promote to full-scale detector training after the multiscale masks look
+   visually cleaner than the baseline on a representative sample.
 
-## Expected Outcome By Strategy
+## Final Project Position
 
-| Strategy                    | Expected output                                        |
-| --------------------------- | ------------------------------------------------------ |
-| Normal                      | Few masks, stable, misses small objects                |
-| Legacy grid                 | Many masks, high recall, noisy                         |
-| Hybrid heatmap small preset | Fewer masks, more targeted small-object additions      |
-| Hybrid balanced preset      | More forgiving than `small`, possibly noisier        |
-| Combined                    | Best visual coverage, risky training target            |
-
-## Current Project Position
-
-The best next scientific comparison is not "which output has the most masks?" It
-is:
+The completed project confirmed that the hybrid heatmap strategy with
+`--ms-preset small` was the right candidate. The decisive finding was:
 
 ```text
-Does multiscale add visually good small-object masks that normal MaskCut misses,
-without adding too many fragments or duplicate overlaps?
+Hybrid crop masks add visually useful small-object structure that normal MaskCut
+misses, but the standalone hybrid detector is too noisy to outperform the baseline.
+The crop masks become genuinely useful when merged with the original single-scale
+MaskCut masks via tools/combine_pseudo_labels.py.
 ```
 
-Right now, the most defensible main candidate is the hybrid heatmap strategy with
-`--ms-preset small`, because it is targeted and already has debug tooling.
+See `PROJECT_NOTES.md` for the full result table and ablation analysis.

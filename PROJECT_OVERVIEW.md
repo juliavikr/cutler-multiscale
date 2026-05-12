@@ -259,32 +259,7 @@ multiscale/
 
 **`multiscale_maskcut.py`** — The heart of our contribution. It extends MaskCut by running crop-level MaskCut rescue passes guided by DINO feature heatmaps, then combines those extra masks with the original single-scale MaskCut output after filtering and deduplication. See `multiscale/MULTISCALE_MASKCUT.md` for the full code guide and CLI reference.
 
----
-
-### `slurm/` — HPC Job Scripts
-
-All heavy computation runs on the Bocconi University HPC cluster via SLURM — a job scheduler that queues GPU jobs. These shell scripts are the interface between our code and the cluster. See `slurm/README.md` for the full script index and submission instructions.
-
----
-
-### `experiments/` — Analysis and Config
-
-| File | What it is |
-|------|-----------|
-| `environment.yml` | Conda environment specification — lists all Python packages and versions |
-| `rank_small_ap.py` | Analysis script: loads evaluation results and ranks/filters by APs metric |
-
----
-
-### `tools/` — Utility Scripts
-
-Utility scripts for visualization, dataset registration, and training orchestration. See `tools/README.md` for usage and CLI examples for each script.
-
----
-
-### `logs/` — Job Output
-
-SLURM writes stdout and stderr from cluster jobs here. The directory is tracked by git (via `.gitkeep`) but the log files themselves are gitignored — they're often hundreds of MB. After a job runs, check here for errors or results.
+For the full script index see `slurm/README.md`, for utility tool usage see `tools/README.md`, and for committed result tables and figures see `results/README.md`.
 
 ---
 

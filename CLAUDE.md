@@ -15,7 +15,6 @@ This is a Bocconi University computer vision course project on unsupervised smal
 - `experiments/` — `environment.yml`, analysis scripts, committed eval outputs
 - `presentation/` — report draft, slide planning, design decision docs
 - `logs/` — gitignored; SLURM job stdout/stderr (check here after jobs finish)
-- `debug/` — gitignored; single-image diagnostic outputs (contact sheets, overlays)
 
 ---
 

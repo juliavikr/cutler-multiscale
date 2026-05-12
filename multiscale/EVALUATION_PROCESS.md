@@ -1,5 +1,10 @@
 # Evaluation Process for Multi-Scale MaskCut
 
+> This document defines the evaluation methodology used in the final project.
+> The steps described here were carried out and the results are reported in
+> `PROJECT_NOTES.md` and `results/`. The empty tables below are reference
+> templates matching the structure used in the report.
+
 This document defines how to evaluate the current MaskCut variants and decide
 which one is best for the project. The main question is:
 
