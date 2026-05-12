@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
+"""
+LEGACY — historical fork of the final hybrid variant (reference only).
+
+This file was an intermediate snapshot of multiscale_maskcut.py created during
+the 5-class study to test the "baseline-first hybrid" strategy: run full-image
+MaskCut first, then run crop rescue only in regions not already explained by the
+baseline masks (two_stage_crop=True).
+
+This behaviour is now the default in the main implementation:
+  multiscale/multiscale_maskcut.py --multi-crop --ms-preset small
+
+This file is kept for historical reference only. Do not use it for new runs.
+"""
 
 import os
 import sys

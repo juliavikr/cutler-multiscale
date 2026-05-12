@@ -1,6 +1,66 @@
 # Results
 
-This folder is for committed result summaries and presentation-ready artifacts. Large raw outputs such as checkpoints, pseudo-label JSONs, and SLURM logs stay off-repo on the cluster.
+Committed result summaries and presentation-ready artifacts. Large raw outputs (checkpoints, pseudo-label JSONs, SLURM logs) stay off-repo on the cluster.
+
+## CSV column reference
+
+### `detector_results_5class.csv`
+
+Evaluation dataset: COCO val2017, class-agnostic, 5-class TinyImageNet training subset (2500 images).
+All AP values are COCO-style Average Precision on a 0–100 scale (not 0–1).
+
+| Column | Meaning |
+|--------|---------|
+| `variant` | Training pseudo-label set identifier |
+| `bbox_ap` | Bounding box AP averaged over IoU thresholds 0.50–0.95 |
+| `ap50` | Bounding box AP at IoU ≥ 0.50 |
+| `ap75` | Bounding box AP at IoU ≥ 0.75 |
+| `aps` | Bounding box AP for small objects (area < 32² px) |
+| `apm` | Bounding box AP for medium objects (32²–96² px) |
+| `apl` | Bounding box AP for large objects (> 96² px) |
+| `segm_ap` | Segmentation mask AP averaged over IoU 0.50–0.95 |
+| `segm_ap50` | Segmentation mask AP at IoU ≥ 0.50 |
+| `segm_ap75` | Segmentation mask AP at IoU ≥ 0.75 |
+
+Variant identifiers:
+
+| `variant` | Description |
+|-----------|-------------|
+| `baseline_single_scale` | Original CutLER single-scale MaskCut |
+| `old_multiscale_only` | Legacy dense-grid crop masks only (no baseline) |
+| `old_combined` | Baseline + legacy dense-grid crop masks merged |
+| `new_hybrid_only` | Refined heatmap-guided crop masks only (no baseline) |
+| `new_combined_hybrid_best` | Baseline + refined heatmap crop masks merged (final result) |
+
+### `hybrid_ablation_100_summary.csv`
+
+Pipeline statistics for 5 ablation variants run on a fixed 100-image subset
+of the 5-class TinyImageNet training set. Each row is one variant.
+Column values are counts across all images in the subset.
+
+| Column | Meaning |
+|--------|---------|
+| `variant` | Ablation configuration name |
+| `images` | Number of images processed |
+| `full_masks` | Masks produced by full-image MaskCut (baseline stage) |
+| `windows` | Total crop windows proposed (heatmap peaks + spatial rescue) |
+| `rescue` | Windows added by the spatial rescue grid strategy |
+| `generated` | Crop masks generated across all windows before any filtering |
+| `crop_candidates` | Candidates entering the scoring and deduplication stage |
+| `scored` | Candidates that passed the CRF stability check |
+| `crop_merged` | Crop masks surviving the graph-merge deduplication step |
+| `merged` | Crop masks surviving the final per-image dedup against full-image masks |
+| `final_annotations` | Total annotations in the output JSON (full + crop masks) |
+
+Variant identifiers:
+
+| `variant` | What changed from the baseline preset |
+|-----------|----------------------------------------|
+| `baseline` | Reference: hp85, topk12, crop sizes 0.25/0.35/0.50 |
+| `hp90` | Heatmap percentile raised to 90 (stricter peak threshold) |
+| `hp80` | Heatmap percentile lowered to 80 (looser peak threshold) |
+| `topk8` | Crop budget reduced from 12 to 8 windows per image |
+| `tightcrop` | Smaller crop sizes: 0.20/0.30/0.40 instead of 0.25/0.35/0.50 |
 
 ## Current committed artifacts
 

@@ -241,6 +241,65 @@ Hybrid heatmap adds:
 --multi-crop --ms-preset small --primary-output multiscale
 ```
 
+## Parameters and Tuning
+
+The `small` preset values were chosen based on the 100-image ablation study
+(see `PROJECT_NOTES.md` §Ablation and `results/hybrid_ablation_100_summary.csv`).
+This section documents the rationale for the key non-obvious values.
+
+### Crop sizes: `0.25, 0.35, 0.50`
+
+Three scales give a range from small (120 px at 480×480 input) to medium (240 px).
+Larger crops (e.g. 0.75) recovered objects already found by the full-image pass;
+smaller crops (< 0.20) were too small for MaskCut to find stable boundaries.
+
+### Crop budget: `heatmap_top_k=12`, `heatmap_spatial_rescue=4`
+
+12 total windows = 8 heatmap-guided + 4 spatial rescue. The ablation showed that
+reducing to `topk8` (8 total) produced cleaner masks with fewer duplicates, while
+`topk12` was the best balance of recall and noise for the 5-class detector study.
+The 4 rescue slots ensure corners and image borders are always sampled.
+
+### Heatmap percentile: `heatmap_percentile=85`
+
+Only the top 15% of heatmap activations are used as crop centres. The ablation
+showed that changing this to 80 or 90 had no effect on the 100-image subset,
+meaning the specific threshold matters less than having one. 85 is a safe default.
+
+### Area filter: `min_area_ratio=0.0001`, `max_area_ratio=0.02`
+
+- `0.0001` (0.01%) filters out single-patch noise masks (< ~7×7 px at 480×480).
+- `0.02` (2%) filters out full-image masks that would duplicate the baseline output.
+  Anything larger than ~96×96 px at 480×480 is likely a large object already
+  found by the full-image pass.
+
+### Containment threshold: `containment_thresh=0.85`
+
+Intersection-over-smaller: if 85% of a smaller mask overlaps a larger one, the
+smaller mask is considered contained and dropped. This is stricter than IoU because
+it catches the common case of a crop mask that is a subset of a full-image mask.
+
+### CRF stability filter: `crf_iou_thresh=0.3`
+
+If the IoU between the raw MaskCut bipartition and the CRF-refined mask is below 0.3,
+the mask is rejected as unstable. The value is permissive by design — it only removes
+masks where CRF disagreed on more than 70% of pixels, which indicates the bipartition
+had no clear boundary signal. Raising this (e.g. to 0.5) rejects more masks and
+reduces noise, at the cost of recall.
+
+### When to override the preset
+
+Start with `--ms-preset small`. Override individual parameters only after
+identifying a specific failure mode in the `candidate_debug` output:
+
+| Symptom | Likely cause | Override |
+|---------|-------------|----------|
+| Too many duplicate masks | Low merge IoU threshold | Raise `--merge-iou-thresh` |
+| Missing objects at image border | Low rescue quota | Raise `--heatmap-spatial-rescue` |
+| Too many tiny fragments | Low area minimum | Raise `--min-mask-area-ratio` |
+| Crops covering dominant object | Area max too high | Lower `--max-mask-area-ratio` |
+| CRF rejecting too many masks | Threshold too strict | Lower `--crf-iou-thresh` |
+
 ## Notes and limitations
 
 1. Compute cost increases with number of windows and scales.

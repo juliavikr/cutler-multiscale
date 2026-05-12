@@ -197,7 +197,7 @@ def get_affinity_matrix(feats, tau, eps=1e-5):
     A = (feats.transpose(0,1) @ feats).cpu().numpy()
     # convert the affinity matrix to a binary one.
     A = A > tau
-    A = np.where(A.astype(float) == 0, eps, A) # susbstituting 0 for eps
+    A = np.where(A.astype(float) == 0, eps, A) # substituting 0 for eps
     d_i = np.sum(A, axis=1) # summing rows
     D = np.diag(d_i) # diagonal of that
     return A, D
@@ -277,7 +277,7 @@ def maskcut_forward(feats, dims, scales, init_image_size, tau=0, N=3, cpu=False)
         else:
             seed = np.argmax(second_smallest_vec)
 
-        # get pxiels corresponding to the seed
+        # get pixels corresponding to the seed
         bipartition = bipartition.reshape(dims).astype(float)
         _, _, _, cc = detect_box(bipartition, seed, dims, scales=scales, initial_im_size=init_image_size)
         pseudo_mask = np.zeros(dims)
@@ -688,10 +688,17 @@ def max_binary_iou(mask, others):
 
 
 def small_object_area_prior(area_ratio):
+    """Log-Gaussian prior favouring masks of typical small-object size.
+
+    Peaks at area_ratio = 0.004 (0.4% of image area), which corresponds to
+    roughly a 44×44 pixel object in a 480×480 image — the upper end of COCO
+    'small' objects. sigma=0.65 log-units spans roughly one order of magnitude
+    so that masks from ~10×10 to ~130×130 pixels all receive meaningful scores.
+    """
     if area_ratio <= 0:
         return 0.0
-    target = 0.004
-    sigma = 0.65
+    target = 0.004  # 0.4% of image area ≈ 44×44 px at 480×480
+    sigma = 0.65    # log-scale half-width; 0.65 ≈ one order of magnitude
     distance = (np.log10(area_ratio) - np.log10(target)) / sigma
     return float(np.exp(-0.5 * distance * distance))
 
@@ -707,6 +714,26 @@ def make_mask_candidate(
     proposal_mask=None,
     retry_scale=1.0,
 ):
+    """Score a candidate crop mask and return it as a MaskCandidate.
+
+    Computes a composite quality score to rank crop masks before deduplication.
+    Higher scores = more object-like; lower scores = likely artefacts.
+
+    Score formula (approximate range: -3 to +5):
+      + 1.4 * area_prior       peak at 0.4% image area (small-object target size)
+      + 1.1 * compactness      rewards filled, roughly convex shapes
+      + 0.7 * crop_prior       rewards masks from high-scoring heatmap windows
+      + 0.8 * proposal_align   rewards masks that fit the heatmap proposal box
+      + 0.5 * crf_iou          rewards stable CRF refinement (boundary agreement)
+      - 1.0 * aspect_penalty   penalises extreme aspect ratios (> 3:1)
+      - 1.2 * border_penalty   penalises masks touching the crop edge (likely cut-off)
+      - 1.0 * crop_shape_pen   penalises masks that span most of the crop (probably
+                                the dominant full-image object, not a small target)
+      - 0.6 * normal_iou       penalises masks that duplicate a full-image MaskCut mask
+
+    The weights were tuned on the 100-image ablation subset to balance small-object
+    recall against fragment and duplicate rates. See PROJECT_NOTES.md §Ablation.
+    """
     bm = mask.astype(np.bool_)
     area = int(bm.sum())
     area_ratio = mask_area_ratio(bm)
@@ -911,6 +938,18 @@ def compute_feature_contrast_heatmap(I, backbone, patch_size, fixed_size, cpu=Fa
 
 
 def score_heatmap_box(heatmap, box, orig_w, orig_h, covered_mask, image_array):
+    """Score a candidate crop window against the DINO feature-contrast heatmap.
+
+    Combines four signals into one scalar:
+      1.5 * object_mean       average heatmap activation in the window
+                              (×1.5 because mean is more robust than max alone)
+      + object_max            peak activation; catches single bright hot spots
+      + 2.0 * object_mean     diversity bonus: double-rewards windows over regions
+        * (1 - coverage)      not yet explained by full-image masks
+      + 0.5 * edge / 128      edge density reward; sharp boundaries raise the score
+      - 0.1 * border_sides    small per-edge penalty for windows that touch the
+                              image border (border crops more likely to be cut-off)
+    """
     left, top, right, bottom = box
     h, w = heatmap.shape
     x1 = max(0, min(w - 1, int(np.floor(left / orig_w * w))))
@@ -956,6 +995,25 @@ def build_spatial_rescue_boxes(
     image_array,
     rescue_k,
 ):
+    """Add crop windows to cover image regions missed by heatmap peak selection.
+
+    The DINO heatmap concentrates proposals near the dominant object, often
+    leaving image borders and corners unexplored. This function divides the image
+    into a 3×3 grid and, for each cell that contains no already-selected window
+    centre, proposes one crop centred on the strongest local heatmap peak in that
+    cell.
+
+    A distance_bonus (0–0.4) is added to the score of each rescue candidate,
+    scaled by how far the cell centre is from the nearest already-selected window.
+    This ensures rescue fills genuinely underexplored areas rather than just
+    proposing near-duplicates of existing selections.
+
+    Only the smallest crop sizes are tried for rescue (up to 2 sizes) — rescue
+    targets small missed objects, not the large dominant region that the heatmap
+    already proposed.
+
+    rescue_k limits the total number of rescue windows added.
+    """
     if rescue_k <= 0:
         return []
 
@@ -1059,6 +1117,26 @@ def generate_heatmap_windows(
     spatial_rescue=0,
     cpu=False,
 ):
+    """Select crop windows for the hybrid heatmap pass.
+
+    Algorithm:
+      1. Compute the DINO feature-contrast heatmap (one forward pass).
+      2. Threshold at `percentile` (default 85 = top 15% of activation).
+      3. For each above-threshold heatmap pixel, generate candidate windows
+         of each size in crop_sizes centred on that pixel.
+      4. Score all candidates with score_heatmap_box() and apply box NMS
+         (suppress overlapping windows with IoU > nms_iou).
+      5. Select the top (top_k - spatial_rescue) heatmap windows.
+      6. Fill remaining slots with build_spatial_rescue_boxes() to cover
+         3×3 grid cells that have no selected window centre.
+      7. Backfill from remaining candidates if still below top_k.
+
+    When spatial_rescue < 0, the rescue count is auto-set to max(2, top_k×0.25).
+    When top_k <= 0, all windows above the percentile threshold are returned.
+
+    Returns a list of dicts: [{box, score, reason}] where reason is one of
+    'heatmap', 'spatial_rescue', or 'heatmap_fill'.
+    """
     orig_w, orig_h = I.size
     heatmap = compute_feature_contrast_heatmap(I, backbone, patch_size, fixed_size, cpu=cpu)
     threshold = np.percentile(heatmap, percentile)
@@ -1136,6 +1214,10 @@ def objectness_from_feature_grid(feat, covered_mask, orig_w, orig_h):
         bg_proto = bg_proto / bg_norm
     bg_distance = 1.0 - np.sum(feat * bg_proto[:, None, None], axis=0)
     bg_distance = normalize_score_map(bg_distance)
+    # Blend local contrast (patch ≠ neighbours) with background distance (patch ≠
+    # border mean). Contrast alone fires on texture; bg_distance alone misses
+    # objects near the image centre. Weights are approximately equal — bg_distance
+    # gets slightly less weight because border estimation is noisier.
     objectness = normalize_score_map((0.55 * contrast) + (0.45 * bg_distance))
 
     if covered_mask is not None and covered_mask.any():
@@ -1157,6 +1239,8 @@ def choose_crop_size_for_component(component_box, sizes, orig_w, orig_h, feat_w,
     x1, y1, x2, y2 = component_box
     box_w = max(1.0, (x2 - x1) / feat_w * orig_w)
     box_h = max(1.0, (y2 - y1) / feat_h * orig_h)
+    # 2.4× ensures the object fills ~40% of the crop, giving MaskCut enough
+    # surrounding context to find the foreground/background boundary cleanly.
     target = max(box_w, box_h) * 2.4
     for size in sizes:
         if size >= target:
@@ -1193,10 +1277,25 @@ def merge_mask_candidates(
     max_aspect_ratio=5.0,
     protected_candidates=None,
 ):
-    """Merge candidates while ranking by mask quality score.
+    """Graph-based deduplication and quality filtering for MaskCandidate objects.
 
-    Area filters define the intent of the crop branch; score ranking decides
-    which surviving masks are most object-like.
+    Unlike merge_masks() (which operates on raw numpy arrays), this function
+    operates on MaskCandidate objects and uses mask_score for ranking.
+
+    Builds an adjacency graph where two candidates are connected if any of:
+      - IoU > merge_iou_thresh (near-duplicate)
+      - intersection-over-smaller > containment_thresh (one contains the other)
+      - bounding boxes overlap after expansion by box_expand_ratio (fragments)
+    Connected components are merged by union, subject to:
+      - merged area <= max_area_ratio
+      - merged bounding box aspect ratio <= max_aspect_ratio
+    After merging, a final dedup pass removes candidates that overlap any
+    protected candidate (full-image MaskCut masks passed via protected_candidates)
+    or a previously accepted crop candidate.
+
+    protected_candidates are always returned first; crop candidates compete
+    for keep_topk slots, ranked by mask_score (higher = more object-like).
+    small_first=True breaks ties by preferring smaller masks (targets APs).
     """
     def _filter_candidates(items, upper_area_ratio):
         filtered_items = []
@@ -1438,6 +1537,17 @@ def merge_masks(
 
 
 def postprocess_crop_mask(crop_rgb, bipartition, crf_iou_thresh=0.3):
+    """Refine a raw MaskCut bipartition with CRF and reject unstable results.
+
+    Applies denseCRF to snap the mask boundary to colour edges in the image,
+    then fills binary holes. Returns (refined_mask, crf_iou).
+
+    If the IoU between the pre- and post-CRF masks falls below crf_iou_thresh,
+    the result is discarded (returns None). A low CRF IoU means the raw bipartition
+    was unstable: the model had no strong boundary, and CRF found a very different
+    interpretation. The default threshold of 0.3 is permissive — it only rejects
+    masks where CRF moved more than 70% of the pixel assignments.
+    """
     pseudo_mask = densecrf(np.array(crop_rgb), bipartition)
     pseudo_mask = ndimage.binary_fill_holes(pseudo_mask >= 0.5)
     crf_iou = binary_iou(bipartition > 0, pseudo_mask)
@@ -1488,6 +1598,58 @@ def maskcut_multicrop(
     return_splits=False,
     return_debug=False,
 ):
+    """Multi-scale MaskCut pseudo-label generation for a single image.
+
+    Two modes of operation controlled by two_stage_crop:
+
+      Baseline (two_stage_crop=False):
+        Runs only full-image MaskCut. Equivalent to the original CutLER pipeline.
+        All crop-related parameters are ignored.
+
+      Hybrid crop-rescue (two_stage_crop=True):
+        1. Run full-image MaskCut to get N baseline masks (protected_masks).
+        2. Mark image regions explained by those masks as 'covered'.
+        3. Select crop windows via generate_heatmap_windows() or a dense grid.
+        4. Skip crop windows where > two_stage_max_covered_ratio of the area
+           is already covered (the full-image pass already handled that region).
+        5. Run MaskCut inside each selected crop (crop_N iterations each).
+        6. Apply CRF postprocessing; reject unstable results (crf_iou_thresh).
+        7. Back-project crop masks to full-image coordinates.
+        8. Deduplicate and filter with merge_mask_candidates().
+        9. Return split outputs: normal (baseline only), multiscale (crop only),
+           combined (baseline + crop union). Use 'multiscale' for training.
+
+    Key parameter groups:
+
+      Crop window selection (crop_mode='heatmap'):
+        heatmap_crop_sizes    fractional sizes of crop windows relative to image,
+                              e.g. [0.25, 0.35, 0.5] = 120/168/240 px at 480×480
+        heatmap_top_k         total crop budget (heatmap peaks + spatial rescue)
+        heatmap_percentile    only pixels above this heatmap percentile used as
+                              crop centres (85 = top 15% of contrast activation)
+        heatmap_nms_iou       NMS threshold for deduplicating proposed windows
+        heatmap_spatial_rescue number of rescue windows from build_spatial_rescue_boxes()
+                              to cover grid cells missed by heatmap peaks
+
+      Merge and deduplication:
+        merge_iou_thresh      IoU above which two masks are near-duplicates
+        containment_thresh    intersection-over-smaller above which a mask is
+                              considered contained within another (dropped)
+        keep_topk             max crop masks to keep per image after dedup
+        min_area_ratio        discard masks smaller than this × image area
+        max_area_ratio        discard masks larger than this × image area (0.02 = 2%)
+        small_first           prefer smaller surviving masks in dedup (targets APs)
+
+      CRF stability filter:
+        crf_iou_thresh        reject CRF-refined mask if pre/post IoU < this value;
+                              lower = stricter filter (0.3 keeps most masks)
+
+    Returns (when return_splits=True):
+        (normal_masks, crop_masks, combined_masks[, stats][, debug])
+        normal_masks    — full-image MaskCut bipartitions (list of H×W bool arrays)
+        crop_masks      — filtered crop rescue masks (same format)
+        combined_masks  — union of the two (for diagnostic use only)
+    """
     if crop_scales is None:
         crop_scales = [1.0, 0.75, 0.5]
     if heatmap_crop_sizes is None:

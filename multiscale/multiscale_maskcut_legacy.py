@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
+"""
+LEGACY — dense-grid multi-crop MaskCut (reference only, not used in the final pipeline).
+
+This file implements the original high-recall dense sliding-window approach:
+MaskCut is run on every crop of a fixed grid across several scales, regardless
+of image content. It produces many masks but with high duplicate and fragment
+rates, which made standalone detector training unreliable.
+
+The current implementation is multiscale/multiscale_maskcut.py, which replaces
+the dense grid with DINO heatmap-guided crop selection (--ms-preset small).
+This file is kept as a reference for the design evolution documented in
+multiscale/STRATEGY_COMPARISON.md (Strategy 2: Legacy Dense-Grid Multi-Crop).
+"""
 
 import os
 import sys
