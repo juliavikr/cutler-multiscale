@@ -62,10 +62,42 @@ Variant identifiers:
 | `topk8` | Crop budget reduced from 12 to 8 windows per image |
 | `tightcrop` | Smaller crop sizes: 0.20/0.30/0.40 instead of 0.25/0.35/0.50 |
 
+### `pseudo_mask_eval_coco500.csv`
+
+Direct pseudo-mask quality evaluation on 500 COCO val2017 images (seed=42).
+3,799 GT instances: 1,570 small, 1,311 medium, 918 large.
+Matching is class-agnostic: a predicted mask matches any GT object with best IoU ≥ 0.5.
+
+| Column | Meaning |
+|--------|---------|
+| `method` | Pseudo-label method identifier |
+| `annotations` | Total predicted masks across all 500 images |
+| `recall_small` | Fraction of small GT objects (area < 32² px) matched at IoU ≥ 0.5 |
+| `recall_medium` | Fraction of medium GT objects (32²–96² px) matched at IoU ≥ 0.5 |
+| `recall_large` | Fraction of large GT objects (area ≥ 96² px) matched at IoU ≥ 0.5 |
+| `recall_all` | Overall recall across all size bins at IoU ≥ 0.5 |
+| `miou_small` | Mean best IoU for small GT objects |
+| `miou_medium` | Mean best IoU for medium GT objects |
+| `miou_large` | Mean best IoU for large GT objects |
+| `miou_all` | Mean best IoU across all GT objects |
+
+Method identifiers:
+
+| `method` | Description |
+|----------|-------------|
+| `baseline_480` | Single-scale MaskCut on 480×480 input |
+| `multiscale_480_320_160` | Hybrid heatmap-guided multi-scale MaskCut with three effective resolutions (480/320/160) |
+
+**Key finding**: small-object recall is 0.0006 for both methods — essentially zero. COCO small objects span
+only 3–4 DINO patches at 480×480; crop rescaling does not escape this floor because the crop is still
+resized to 480×480 and patch resolution is unchanged. The multiscale improvement in medium/large recall
+(+18% and +16%) comes from processing more crop windows, not from increased patch density on small objects.
+
 ## Current committed artifacts
 
 - `results/detector_results_5class.csv` - final 5-class detector comparison table
 - `results/hybrid_ablation_100_summary.csv` - 100-image ablation summary table
+- `results/pseudo_mask_eval_coco500.csv` - direct pseudo-mask quality evaluation on COCO val500
 - `results/figures/` - curated PNG plots for the report and poster
   - `detector_results_5class.png` - main detector comparison figure
   - `hybrid_ablation/` - ablation summary figures

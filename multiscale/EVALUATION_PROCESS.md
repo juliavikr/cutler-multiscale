@@ -392,6 +392,33 @@ Purpose:
 - helps justify future work,
 - makes the project look methodologically mature.
 
+## Completed Level 1 Evaluation Results
+
+The direct pseudo-mask evaluation was run on 500 COCO val2017 images (seed=42), 3,799 GT instances.
+
+| Method | Annotations | Small R@0.5 | Medium R@0.5 | Large R@0.5 | Overall R@0.5 | Small mIoU | Overall mIoU |
+|--------|------------:|------------:|-------------:|------------:|-------------:|----------:|------------:|
+| Baseline (480) | 879 | 0.0006 | 0.0420 | 0.3758 | 0.1056 | 0.0057 | 0.1245 |
+| Multiscale (480+320+160) | 2,275 | 0.0006 | 0.0496 | 0.4346 | 0.1224 | 0.0069 | 0.1418 |
+
+Full results in `results/pseudo_mask_eval_coco500.csv`.
+
+**What this means for the project:**
+
+The decision criterion "Small Recall@0.50 improves by at least 10–15%" was **not met**. Both methods
+score essentially zero for small-object recall. The patch-resolution floor of ViT-S/8 at 480×480
+(3–4 patches per COCO small object) is the binding constraint, and crop rescaling does not change it.
+
+The multiscale method does improve medium and large recall by ~16–18%, which transfers to the
+detector as a segmentation AP improvement (+126% SEGM AP in the combined detector vs baseline).
+This is a meaningful result, but the mechanism is pseudo-label diversity, not small-object rescue.
+
+Two implementation bugs were discovered and fixed during this evaluation:
+1. Image ID mismatch: MaskCut assigns sequential IDs instead of real COCO IDs — fix by remapping
+   via filename matching before matching against GT.
+2. RLE dimension swap: MaskCut stores mask `size` as `[w, h]`; COCO expects `[h, w]` — fix by
+   transposing decoded masks when shape mismatches image dimensions.
+
 ## Decision Criteria
 
 Pick the best method using this order:

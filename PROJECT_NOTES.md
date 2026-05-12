@@ -74,7 +74,7 @@ The final lesson from the project is that the second option is the useful one:
 - [X] Phase 5 - Detector training on baseline, multiscale, combined, and refined hybrid variants
 - [X] Phase 6 - COCO class-agnostic evaluation of all major detector runs
 - [X] Phase 7 - 100-image hybrid ablation study
-- [ ] Optional follow-ups: full-scale `topk8` run, longer training, direct pseudo-label quality evaluation against GT masks
+- [X] Phase 8 - Direct pseudo-mask evaluation on COCO val500 (Level 1 evaluation)
 
 ---
 
@@ -196,7 +196,64 @@ This is the main detector comparison to cite in the report and presentation.
   - clearly better than baseline in **segm AP** (`1.0814` vs `0.4792`)
   - much better than both the old multiscale-only and old combined runs
 
-So the refined hybrid method works best as a **supplementary small-object recovery stage**, not as a standalone pseudo-label generator.
+The Phase 8 direct pseudo-mask evaluation (see below) clarified **why** combining works: the gain is not
+from recovering small objects directly. It is from pseudo-label diversity — more crop masks covering
+medium and large objects that the single full-image pass missed. The refined hybrid method works best as a
+**pseudo-label diversity supplement**, not a small-object rescue stage.
+
+---
+
+## Direct Pseudo-Mask Evaluation (Phase 8)
+
+Level 1 evaluation: pseudo-labels generated on 500 COCO val2017 images, compared directly to
+COCO GT instance masks (class-agnostic matching, IoU ≥ 0.5 threshold).
+
+Dataset: 500 images (seed=42), 3,799 GT objects — 1,570 small, 1,311 medium, 918 large.
+
+Two bugs were found and fixed during this evaluation (not yet merged into the main scripts):
+1. **Image ID mismatch**: MaskCut assigns sequential IDs (1, 2, 3, …) instead of real COCO IDs — fixed by
+   remapping via filename matching.
+2. **RLE dimension swap**: MaskCut stores RLE `size` as `[w, h]` instead of COCO standard `[h, w]` — fixed
+   by transposing decoded masks when shape mismatches image dimensions.
+
+### Results
+
+| Method | Annotations | Small R@0.5 | Medium R@0.5 | Large R@0.5 | Overall R@0.5 | Small mIoU | Medium mIoU | Large mIoU | Overall mIoU |
+|--------|------------:|------------:|-------------:|------------:|-------------:|----------:|------------:|----------:|------------:|
+| Baseline (480) | 879 | 0.0006 | 0.0420 | 0.3758 | 0.1056 | 0.0057 | 0.0772 | 0.3950 | 0.1245 |
+| Multiscale (480+320+160) | 2,275 | 0.0006 | 0.0496 | 0.4346 | 0.1224 | 0.0069 | 0.0901 | 0.4464 | 0.1418 |
+
+### Key finding
+
+**Small-object recall is 0.0006 for both methods — essentially zero.** The "zoom in → more patches →
+find small objects" hypothesis was not validated.
+
+The fundamental barrier: COCO small objects have area < 32² = 1,024 px². At 480×480 input with 8×8
+patches, this maps to only 3–4 patches. When we place a crop around a heatmap peak and resize it to
+480×480, the crop covers a larger region of the original image — so the small object inside the crop
+still spans only 3–4 patches after resizing. Patch resolution is unchanged; only the surrounding
+context changes. Spectral clustering on 3–4 patches cannot produce stable masks regardless of scale.
+
+Multiscale does improve medium and large recall:
+- medium recall: +18% relative (0.042 → 0.050)
+- large recall: +16% relative (0.376 → 0.435)
+
+This is because crop windows sample different regions of the image, increasing the chance of isolating
+medium/large objects that the single full-image Normalized Cuts pass missed due to global competition
+with dominant structures.
+
+### Implication for the detector results
+
+The AR-small improvement in the combined detector (from ~0.040 to ~0.084, full-COCO baseline) is
+likely **indirect**: more pseudo-labels for medium/large objects leads to better feature learning in
+the detector backbone and better proposal recall overall, which incidentally improves small-object
+detection without the pseudo-labels themselves containing small objects.
+
+The honest claim for this project is:
+
+> Multi-scale MaskCut increases pseudo-label diversity and quantity, improving detector performance
+> across all size categories — but it does not solve the fundamental small-object blindness of
+> DINO-based NCut, which is constrained by the patch resolution floor of ViT-S/8 at 480×480 input.
 
 ---
 
@@ -289,13 +346,15 @@ This is the main conceptual shift:
 
 ---
 
-## Open Questions / Limitations
+## Limitations
 
 - Hybrid masks **alone** still do not train a strong detector.
-- The best result so far is a **merged** pseudo-label set, not a pure hybrid one.
-- The 100-image ablation is a strong screening study, but `topk8` has not yet been promoted to a full 2500-image detector comparison.
+- The best result is a **merged** pseudo-label set (baseline + crop rescue), not a pure hybrid one.
+- The 100-image ablation supports the `topk8` variant as potentially cleaner, but it was not promoted to a full 2500-image detector comparison.
 - The refined study used a 5-class subset, so absolute AP remains much lower than large-scale published CutLER results.
-- Direct level-1 pseudo-label quality evaluation against ground-truth masks was not run in this workstream.
+- The direct pseudo-mask evaluation (Phase 8) confirmed that the method does not recover small objects
+  at the COCO definition. Small-object recall is constrained by the patch-resolution floor of ViT-S/8
+  and cannot be improved by crop rescaling at fixed 480×480 input.
 
 ---
 
@@ -308,4 +367,5 @@ This is the main conceptual shift:
 | `multiscale/STRATEGY_COMPARISON.md`           | Detailed comparison of crop proposal strategies           |
 | `multiscale/EVALUATION_PROCESS.md`            | Evaluation methodology, metrics, and figures              |
 | `results/hybrid_ablation_100_summary.csv`     | 100-image ablation summary data                           |
+| `results/pseudo_mask_eval_coco500.csv`        | Direct pseudo-mask evaluation on COCO val500 (Phase 8)   |
 | `experiments/plot_hybrid_ablation_results.py` | Python plot generator for ablation presentation charts    |

@@ -10,8 +10,10 @@ These are the scripts that matter for the final project story.
 
 | Script | Role |
 |---|---|
-| `run_maskcut_baseline.sh` | baseline single-scale MaskCut generation |
-| `run_multiscale_maskcut.sh` | refined hybrid multi-scale generation through `multiscale/multiscale_maskcut.py` |
+| `run_maskcut_baseline.sh` | baseline single-scale MaskCut on TinyImageNet subset |
+| `run_multiscale_maskcut.sh` | refined hybrid multi-scale generation on TinyImageNet subset |
+| `run_maskcut_baseline_coco.sh` | baseline single-scale MaskCut on COCO val500 (Level 1 eval) |
+| `run_multiscale_maskcut_coco.sh` | refined hybrid multi-scale MaskCut on COCO val500 (Level 1 eval) |
 | `run_hybrid_ablation_100.sh` | one named 100-image hybrid ablation |
 | `run_hybrid_ablations_100_onejob.sh` | full 100-image hybrid ablation suite in a single job |
 
@@ -38,8 +40,6 @@ These are kept for reference, but they are not the recommended path for the fina
 |---|---|
 | `run_maskcut.sh` | legacy |
 | `run_multiscale_maskcut_tinyimagenet.sh` | older hardcoded path |
-| `run_maskcut_baseline_coco.sh` | older COCO-oriented baseline helper |
-| `run_multiscale_maskcut_coco.sh` | older COCO-oriented multiscale helper |
 | `run_training.sh` | older generic training runner |
 | `submit_hybrid_ablations_100.sh` | separate-job submission path, superseded by one-job ablation for the final study |
 | `run_final_multiscale_luiz.sh` | one-off historical fork runner |
@@ -57,10 +57,10 @@ These are kept for reference, but they are not the recommended path for the fina
 ## Final workflow
 
 ```bash
-# 1. Baseline masks
+# 1. Baseline masks (TinyImageNet)
 sbatch slurm/run_maskcut_baseline.sh
 
-# 2. Refined hybrid masks
+# 2. Refined hybrid masks (TinyImageNet)
 sbatch slurm/run_multiscale_maskcut.sh
 
 # 3. Merge baseline + refined hybrid
@@ -73,7 +73,23 @@ sbatch slurm/run_training_luiz.sh
 sbatch slurm/run_eval.sh
 ```
 
+## Direct pseudo-mask evaluation (Level 1)
+
+Run on COCO val500 to compare pseudo-label quality against GT masks:
+
+```bash
+# Baseline pseudo-labels on COCO val500
+sbatch slurm/run_maskcut_baseline_coco.sh
+
+# Multiscale pseudo-labels on COCO val500
+sbatch slurm/run_multiscale_maskcut_coco.sh
+```
+
+Results from the completed evaluation are in `results/pseudo_mask_eval_coco500.csv`.
+
 ## Notes
 
 - The final project result is based on **combined pseudo-labels**, not hybrid-only pseudo-labels.
 - The authoritative method implementation is `multiscale/multiscale_maskcut.py`.
+- Level 1 evaluation confirmed small-object recall is effectively zero for both methods; improvement
+  is via pseudo-label diversity for medium/large objects.

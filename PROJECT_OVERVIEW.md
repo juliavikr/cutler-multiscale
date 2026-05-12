@@ -159,9 +159,19 @@ Notice **APs = 3.66** — tiny compared to APl = 29.60. The detector finds large
 
 At native resolution (e.g., 480×480 input), a small object (say, a 20×20 pixel bird in the distance) maps to only **~6 patches** of size 8×8. With just 6 data points, the similarity graph is sparse, spectral clustering is unstable, and the eigenvector signal is weak and noisy. The object gets missed or produces a garbage mask.
 
-**The intuition for the fix:** If we **zoom in** on that region of the image (crop it and resize to 480×480), the same bird now spans ~60 patches — 10× more signal. Spectral clustering becomes reliable and the object is found.
+**The intuition for a fix:** Cropping the image around a locally distinctive region and resizing to 480×480 gives MaskCut more patches to work with for objects in that region. This is the hypothesis we tested.
 
-This is exactly what our multi-scale extension does.
+**What the evaluation showed:** This hypothesis was tested directly (Level 1 evaluation on 500 COCO
+val images comparing pseudo-label masks against ground truth). The result: small-object recall was
+0.0006 for **both** baseline and multi-scale — essentially zero. Why? A COCO “small” object has area
+< 32² = 1,024 px². At 480×480 input with 8×8 patches, this spans only 3–4 patches. When we crop
+around that region and resize to 480×480, the crop covers a larger area of the original image, so
+the small object inside the crop still spans only 3–4 patches. The patch resolution floor is
+unchanged; only the surrounding context changes. Spectral clustering on 3–4 patches produces
+unstable boundaries at any scale.
+
+The multi-scale extension does still produce measurable improvements — but through a different
+mechanism than originally hypothesized (see Section 6).
 
 ---
 
@@ -169,30 +179,43 @@ This is exactly what our multi-scale extension does.
 
 ### The crop-rescue idea
 
-Instead of trusting a single full-image MaskCut pass, we first run the original baseline and then build additional crop views around locally distinctive regions. The role of the multi-scale stage is to **add missing small-object masks**, not to replace the full-image masks.
+Instead of trusting a single full-image MaskCut pass, we first run the original baseline and then build additional crop views around locally distinctive regions. The role of the multi-scale stage is to **add coverage of missed regions**, not to replace the full-image masks.
 
 ```
-Full image (1×)        → run MaskCut → masks at full scale
-75% crops (0.75×)      → run MaskCut → masks at 75% scale, back-projected
-50% crops (0.5×)       → run MaskCut → masks at 50% scale, back-projected
+Full image (1×)      → run MaskCut → masks at full scale
+50% crops (0.50×)    → run MaskCut → masks at 50% scale, back-projected
+35% crops (0.35×)    → run MaskCut → masks at 35% scale, back-projected
+25% crops (0.25×)    → run MaskCut → masks at 25% scale, back-projected
 ```
 
-Each "crop" is a rectangular sub-region of the original image, resized to the standard input size (480×480). Crops overlap by 30% to avoid missing objects near crop edges.
+Each “crop” is a rectangular sub-region of the original image, resized to the standard input size (480×480). Crops are placed at locations highlighted by a DINO feature-contrast heatmap, with a spatial rescue grid to ensure edge coverage.
 
 ### The pipeline
 
 1. **Run baseline full-image MaskCut**: This gives the original trusted pseudo-masks
-2. **Compute a DINO feature-contrast heatmap**: This highlights locally distinctive regions that may contain missed structure
-3. **Select crop windows**: Place multi-size crops around strong heatmap regions
-4. **Run MaskCut on each crop independently**: Each crop is treated as a standalone image, so small objects get more patch resolution
+2. **Compute a DINO feature-contrast heatmap**: Highlights locally distinctive regions with unexplained structure
+3. **Select crop windows**: Place multi-size crops around heatmap peaks; add spatial rescue crops at image corners and borders
+4. **Run MaskCut on each crop independently**: Each crop is treated as a standalone image
 5. **Back-project crop masks**: Crop predictions are mapped back to full-image coordinates
 6. **Filter and deduplicate**: Remove fragments, contained masks, and obvious duplicates
 7. **Combine with the baseline masks**: Keep the original single-scale masks and add only useful rescue masks from the crop stage
 8. **Output**: A merged pseudo-label set in the same JSON format as original MaskCut
 
-### Expected improvement
+### What actually improved
 
-By running at finer scales, we recover small objects that were previously invisible at 1× resolution. The intended win is **not** “hybrid-only beats baseline.” The intended win is that **baseline + rescue masks** improves the final pseudo-label set, especially for small or missed regions.
+The direct pseudo-mask evaluation confirmed the following:
+- Small-object recall: **no improvement** (0.0006 for both baseline and multiscale)
+- Medium-object recall: +18% relative improvement (0.042 → 0.050)
+- Large-object recall: +16% relative improvement (0.376 → 0.435)
+
+The improvement in medium/large recall comes from **pseudo-label diversity** — crop windows sample
+different regions of the image and isolate medium/large objects that the single full-image Normalized
+Cuts pass missed because they competed with more dominant regions.
+
+The downstream detector improvement (particularly in segmentation AP) is therefore driven by having
+a richer and more varied pseudo-label set, not by directly supervising small-object detection. The
+hybrid method works as a **pseudo-label coverage supplement**, and combining it with the baseline
+single-scale masks gives the best detector.
 
 ---
 

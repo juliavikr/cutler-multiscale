@@ -27,6 +27,13 @@ The repository is organized around one main idea:
 
 The refined hybrid masks were **not** successful as a standalone pseudo-label source. The best result comes from using them as a **supplement** to the original MaskCut masks.
 
+**Why combining works** (from the direct pseudo-mask evaluation on COCO val500): multi-scale MaskCut
+does **not** recover small objects. Small-object recall is essentially zero for both baseline and
+multiscale — COCO small objects span only 3–4 DINO patches at 480×480, which is below the minimum
+needed for stable spectral clustering regardless of crop scale. The gain from combining comes from
+**pseudo-label diversity**: crop windows sample more regions of each image and cover medium/large
+objects that the single full-image pass missed due to competition with dominant structures.
+
 ## Main result
 
 Class-agnostic COCO evaluation, main 5-class study:
@@ -37,7 +44,9 @@ Class-agnostic COCO evaluation, main 5-class study:
 | New hybrid-only | 0.3026 | 0.1946 | refined hybrid masks only |
 | New combined hybrid-best | 2.2557 | 1.0814 | baseline + refined hybrid masks |
 
-Takeaway: the refined hybrid method helps **after merging with baseline**, not by replacing it.
+Takeaway: the refined hybrid method improves the pseudo-label set by adding diversity (more coverage
+of medium and large objects), not by directly recovering small objects. Combining with baseline is
+required — hybrid-only is weaker, not stronger.
 
 ## Reproducing the results
 

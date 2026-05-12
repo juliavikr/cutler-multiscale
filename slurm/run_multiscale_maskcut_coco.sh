@@ -1,48 +1,50 @@
 #!/bin/bash
 #SBATCH --job-name=maskcut_multiscale_coco
-#SBATCH --output=%x_%j.out
-#SBATCH --error=%x_%j.err
+#SBATCH --output=logs/maskcut_multiscale_coco_%j.out
+#SBATCH --error=logs/maskcut_multiscale_coco_%j.err
 #SBATCH --time=12:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --gres=gpu:1
+#SBATCH --partition=stud
 #SBATCH --qos=stud
+#SBATCH --account=3355142
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-PROJECT=$HOME/cutler-multiscale
-DATA_ROOT=/mnt/beegfsstudents/home/3152697
-BACKBONE=$DATA_ROOT/weights/dino_deitsmall8_pretrain.pth
-DATASET=$HOME/data/coco_val500_wrapped
-OUT_DIR=$DATA_ROOT/coco/pseudo_labels/coco_multiscale_pseudo
-ANNO_OUT=$DATA_ROOT/coco/annotations/coco_multiscale_pseudo.json
+PROJECT=${HOME}/cutler-multiscale
+BACKBONE=${HOME}/data/weights/dino_deitsmall8_pretrain.pth
+DATASET=${HOME}/data/coco_val500_wrapped
+OUT_DIR=${HOME}/data/coco/pseudo_labels/coco_multiscale_pseudo
+ANNO_OUT=${HOME}/data/coco/annotations/coco_multiscale_pseudo.json
 
 # ── Setup ────────────────────────────────────────────────────────────────────
-source ~/.bashrc
+module load miniconda3
+eval "$(conda shell.bash hook)"
 conda activate cutler
 
-# Create the wrapped flat dir if it doesn't already exist
-mkdir -p $HOME/data/coco_val500_wrapped/coco
-if [ ! "$(ls -A $HOME/data/coco_val500_wrapped/coco)" ]; then
+# Wrap flat COCO val500 images into a single subfolder so MaskCut's
+# folder-per-class iteration finds them in one pass
+mkdir -p ${HOME}/data/coco_val500_wrapped/coco
+if [ ! "$(ls -A ${HOME}/data/coco_val500_wrapped/coco)" ]; then
     echo "Symlinking COCO val500 images into wrapped dir..."
-    ln -s $HOME/data/coco_val500/*.jpg $HOME/data/coco_val500_wrapped/coco/
+    ln -s ${HOME}/data/coco_val500/*.jpg ${HOME}/data/coco_val500_wrapped/coco/
 fi
 
 mkdir -p $OUT_DIR
+mkdir -p $(dirname $ANNO_OUT)
+mkdir -p ${PROJECT}/logs
 
 echo "=== Multiscale MaskCut on COCO val500 ==="
 echo "Start: $(date)"
 
-cd $PROJECT/CutLER/maskcut
-
-# NOTE on --max-mask-area-ratio:
-#   COCO images are ~640px. At fixed_size=480, a 0.02 cap = 0.02 * 480^2 = 4608 px^2.
-#   COCO "small" threshold is area < 32^2 = 1024 px^2.
-#   So 0.02 is reasonable for COCO (won't incorrectly cap small objects).
-#   This is different from TinyImageNet (64px originals → cap was 81 px^2 — too tight).
-
-python maskcut_multiscale.py \
+# Run hybrid heatmap-guided multi-scale MaskCut.
+# --primary-output multiscale: write the crop-masks-only split (training-ready).
+# --ms-preset small: heatmap_crop_sizes=0.25/0.35/0.50, topk=12, rescue=4.
+# --max-mask-area-ratio 0.5: COCO images are ~640px; at fixed_size=480 a 0.5 cap
+#   = 0.5 * 480^2 = 115200 px^2, which is well above any useful object.
+python ${PROJECT}/multiscale/multiscale_maskcut.py \
     --vit-arch small \
     --patch-size 8 \
     --tau 0.15 \
@@ -53,17 +55,17 @@ python maskcut_multiscale.py \
     --dataset-path $DATASET \
     --out-dir $OUT_DIR \
     --N 3 \
-    --scales 1.0 0.75 0.5 \
-    --max-mask-area-ratio 0.5 \
-    --cpu-only False
+    --multi-crop \
+    --ms-preset small \
+    --primary-output multiscale \
+    --max-mask-area-ratio 0.5
 
 echo "MaskCut done: $(date)"
 
-# ── Convert output to COCO JSON ───────────────────────────────────────────────
-python $PROJECT/tools/merge_maskcut_output.py \
+# Merge per-folder JSON outputs into a single annotation file
+python ${PROJECT}/CutLER/maskcut/merge_jsons.py \
     --input-dir $OUT_DIR \
-    --output $ANNO_OUT \
-    --image-root $HOME/data/coco_val500
+    --output $ANNO_OUT
 
 echo "Annotation saved to $ANNO_OUT"
 echo "=== Done: $(date) ==="
