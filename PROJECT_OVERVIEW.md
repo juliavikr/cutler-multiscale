@@ -228,7 +228,6 @@ single-scale masks gives the best detector.
 | `README.md` | Setup instructions, reproduction commands, and results tables — the public face of the repo |
 | `PROJECT_NOTES.md` | Running log: phase status, locked parameters, generated artifacts, training records, active blockers |
 | `PROJECT_OVERVIEW.md` | This file — plain-English pipeline explanation for non-experts |
-| `CLAUDE.md` | Instructions for Claude Code (the AI coding assistant used to write code) |
 | `LICENSE` | MIT open-source license |
 | `.gitignore` | Tells git which files NOT to track (large data files, model weights, logs) |
 | `.gitmodules` | Tells git that `CutLER/` is a submodule (a link to another repo) |
